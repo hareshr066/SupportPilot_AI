@@ -1,0 +1,29 @@
+===================================================================================
+                       GROUNDED RESOLUTION REPORT                                   
+===================================================================================
+RESOLUTION TYPE:     INSUFFICIENT_EVIDENCE
+HUMAN REVIEW NEEDED: True
+CITATION COVERAGE:   0.0%
+UNSUPPORTED CLAIMS:  100.0%
+-----------------------------------------------------------------------------------
+SUMMARY:
+  Insufficient historical resolution evidence available to synthesize a confident fix.
+
+DIAGNOSIS:
+  Unable to determine exact root cause from available evidence.
+
+RECOMMENDED RESOLUTION:
+  Manual support triage required. No reliable automated resolution established.
+
+STEPS:
+  1. Review ticket details and assign to technical support engineer. [Sources: None]
+
+CLAIMS & CITATIONS:
+  [c1] Automated resolution evidence was insufficient for safe automated fix.
+       Sources: None | Status: missing_sources
+
+LIMITATIONS & UNCERTAINTIES:
+  - No strong historical resolved cases found in retrieved context.
+
+RETRIEVED EVIDENCE SOURCES:
+===================================================================================

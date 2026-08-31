@@ -1,0 +1,45 @@
+===================================================================================
+                       GROUNDED RESOLUTION REPORT                                   
+===================================================================================
+RESOLUTION TYPE:     INSUFFICIENT_EVIDENCE
+HUMAN REVIEW NEEDED: True
+CITATION COVERAGE:   0.0%
+UNSUPPORTED CLAIMS:  100.0%
+-----------------------------------------------------------------------------------
+SUMMARY:
+  Insufficient historical resolution evidence available to synthesize a confident fix.
+
+DIAGNOSIS:
+  Unable to determine exact root cause from available evidence.
+
+RECOMMENDED RESOLUTION:
+  Manual support triage required. No reliable automated resolution established.
+
+STEPS:
+  1. Review ticket details and assign to technical support engineer. [Sources: None]
+
+CLAIMS & CITATIONS:
+  [c1] Automated resolution evidence was insufficient for safe automated fix.
+       Sources: None | Status: missing_sources
+
+LIMITATIONS & UNCERTAINTIES:
+  - No strong historical resolved cases found in retrieved context.
+
+RETRIEVED EVIDENCE SOURCES:
+  - [issue:332514] Starting a new Copilot thread with pasted text always leads to "#attachment:Pasted text #1" as the chat title (Score: 0.016288, Completeness: 0.2)
+       URL: https://github.com/microsoft/vscode/issues/332514
+  - [issue:332515] Need a command to copy all errors/warnings in the Problems panel (Score: 0.016235, Completeness: 0.2)
+       URL: https://github.com/microsoft/vscode/issues/332515
+  - [issue:332511] [WIP] Fix child-chat subscription storm and memory spike during session load (Score: 0.009901, Completeness: 0.2)
+       URL: https://github.com/microsoft/vscode/pull/332511
+  - [issue:332508] Git: fix swapped name and commit in ls-remote heads parsing (Score: 0.009752, Completeness: 0.2)
+       URL: https://github.com/microsoft/vscode/pull/332508
+  - [issue:332505] Create session from PR: wrong repo is used for PR list (Score: 0.009608, Completeness: 0.2)
+       URL: https://github.com/microsoft/vscode/issues/332505
+  - [issue:332506] Context key scanner rejects the d and v regex flags in when clauses (Score: 0.009468, Completeness: 0.2)
+       URL: https://github.com/microsoft/vscode/issues/332506
+  - [issue:332507] Quick pick filter freezes on queries with runs of * wildcards (Score: 0.009333, Completeness: 0.2)
+       URL: https://github.com/microsoft/vscode/issues/332507
+  - [issue:332509] Context keys: accept the d and v regex flags in when clauses (Score: 0.009201, Completeness: 0.2)
+       URL: https://github.com/microsoft/vscode/pull/332509
+===================================================================================

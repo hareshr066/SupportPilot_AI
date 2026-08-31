@@ -1,0 +1,11 @@
+issue_id,issue_number,cluster_id,membership_probability,title
+1,332515,-1,0.0000,"Need a command to copy all errors/warnings in the Problems panel"
+2,332514,-1,0.0000,"Starting a new Copilot thread with pasted text always leads to ""#attachment:Pasted text #1"" as the chat title"
+3,332512,-1,0.0000,"Move to nightly build"
+4,332511,-1,0.0000,"[WIP] Fix child-chat subscription storm and memory spike during session load"
+5,332510,-1,0.0000,"Filters: collapse runs of wildcards in quick pick queries"
+6,332509,-1,0.0000,"Context keys: accept the d and v regex flags in when clauses"
+7,332508,-1,0.0000,"Git: fix swapped name and commit in ls-remote heads parsing"
+8,332507,-1,0.0000,"Quick pick filter freezes on queries with runs of * wildcards"
+9,332506,-1,0.0000,"Context key scanner rejects the d and v regex flags in when clauses"
+10,332505,-1,0.0000,"Create session from PR: wrong repo is used for PR list"
