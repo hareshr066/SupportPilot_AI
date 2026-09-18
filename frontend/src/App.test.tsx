@@ -9,6 +9,7 @@ vi.mock('./api/client', async () => {
   return {
     ...actual,
     api: {
+      getReadiness: vi.fn().mockResolvedValue({ status: 'ready', checks: { database: 'ok', pgvector: 'ok', models: 'ok' } }),
       getDashboardSummary: vi.fn(),
       getRecentRuns: vi.fn(),
       getRepositories: vi.fn(),
@@ -21,6 +22,13 @@ vi.mock('./api/client', async () => {
       getPipelineRunStages: vi.fn(),
       getPipelineRunEvidence: vi.fn(),
       getPipelineRunEscalation: vi.fn(),
+      getIssues: vi.fn().mockResolvedValue({ total: 0, limit: 50, offset: 0, issues: [] }),
+      getIssue: vi.fn(),
+      listRuns: vi.fn().mockResolvedValue([]),
+      getEvaluations: vi.fn().mockResolvedValue({ total: 0, limit: 20, offset: 0, evaluations: [] }),
+      getEvaluationDetails: vi.fn(),
+      getEvaluationMetrics: vi.fn(),
+      getEvaluationFailures: vi.fn().mockResolvedValue({ evaluation_run_id: 'test', total_failures: 0, failures: [] }),
     },
   };
 });
@@ -30,7 +38,11 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
     vi.clearAllMocks();
     window.history.pushState({}, '', '/');
 
-    // Default resolves to avoid unhandled rejections on router load
+    vi.mocked(api.getReadiness).mockResolvedValue({
+      status: 'ready',
+      checks: { database: 'ok', pgvector: 'ok', models: 'ok' },
+    });
+
     vi.mocked(api.getDashboardSummary).mockResolvedValue({
       total_tickets: 0,
       analyzed_today: 0,
@@ -39,6 +51,7 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
       high_severity_tickets: 0,
       average_pipeline_latency_ms: 0,
     });
+
     vi.mocked(api.getRecentRuns).mockImplementation(async (_limit, _offset, _repoId, finalDecision) => {
       if (finalDecision === 'HUMAN_ESCALATION') {
         return [
@@ -60,6 +73,7 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
       }
       return [];
     });
+
     vi.mocked(api.getRepositories).mockResolvedValue([
       {
         id: 1,
@@ -87,14 +101,14 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
 
     render(<App />);
 
-    expect(await screen.findByText('Operations Dashboard')).toBeInTheDocument();
+    expect((await screen.findAllByText('AI Engineering Operations'))[0]).toBeInTheDocument();
     expect(await screen.findByText('42')).toBeInTheDocument();
     expect(await screen.findByText('1240.5 ms')).toBeInTheDocument();
   });
 
   // 2. Repository list
   it('2. Renders connected repositories table on Repositories page', async () => {
-    vi.mocked(api.getRepositories).mockResolvedValueOnce([
+    vi.mocked(api.getRepositories).mockResolvedValue([
       {
         id: 1,
         owner: 'microsoft',
@@ -109,7 +123,7 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
 
     render(<App />);
 
-    const repoNav = await screen.findByText('Repositories');
+    const repoNav = await screen.findByRole('link', { name: /Repositories/i });
     fireEvent.click(repoNav);
 
     expect(await screen.findByText('microsoft/vscode')).toBeInTheDocument();
@@ -132,15 +146,16 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByText('Repositories'));
+    fireEvent.click(await screen.findByRole('link', { name: /Repositories/i }));
+    fireEvent.click(await screen.findByRole('button', { name: /Connect Repository/i }));
 
     const ownerInput = await screen.findByPlaceholderText('e.g. microsoft');
     const nameInput = await screen.findByPlaceholderText('e.g. vscode');
-    const submitBtn = await screen.findByText('Connect');
 
     fireEvent.change(ownerInput, { target: { value: 'facebook' } });
     fireEvent.change(nameInput, { target: { value: 'react' } });
-    fireEvent.click(submitBtn);
+    fireEvent.click(await screen.findByText('Continue'));
+    fireEvent.click(await screen.findByText('Register Repository'));
 
     await waitFor(() => {
       expect(api.createRepository).toHaveBeenCalledWith({ owner: 'facebook', name: 'react' });
@@ -179,7 +194,7 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
 
     render(<App />);
 
-    fireEvent.click(await screen.findByText('Repositories'));
+    fireEvent.click(await screen.findByRole('link', { name: /Repositories/i }));
     const syncBtn = await screen.findByText('Trigger Sync');
     fireEvent.click(syncBtn);
 
@@ -192,10 +207,10 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
   it('5. Validates empty ticket title on submission', async () => {
     render(<App />);
 
-    const navBtn = (await screen.findAllByText('Analyze Ticket'))[0];
+    const navBtn = (await screen.findAllByRole('button', { name: /Run Investigation/i }))[0];
     fireEvent.click(navBtn);
 
-    const submitBtn = await screen.findByText('Submit for AI Analysis');
+    const submitBtn = (await screen.findAllByRole('button', { name: /Run Investigation/i }))[0];
     fireEvent.click(submitBtn);
 
     expect(await screen.findByText('Ticket title is required.')).toBeInTheDocument();
@@ -221,13 +236,13 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
 
     render(<App />);
 
-    const navBtn = (await screen.findAllByText('Analyze Ticket'))[0];
+    const navBtn = (await screen.findAllByRole('button', { name: /Run Investigation/i }))[0];
     fireEvent.click(navBtn);
 
-    const titleInput = await screen.findByPlaceholderText(/Terminal crash after update/);
+    const titleInput = await screen.findByPlaceholderText(/Integrated terminal pty crash/i);
     fireEvent.change(titleInput, { target: { value: 'Terminal pty crash' } });
 
-    const submitBtn = await screen.findByText('Submit for AI Analysis');
+    const submitBtn = (await screen.findAllByRole('button', { name: /Run Investigation/i }))[0];
     fireEvent.click(submitBtn);
 
     await waitFor(() => {
@@ -275,13 +290,14 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
 
     render(<App />);
 
-    const navBtn = (await screen.findAllByText('Analyze Ticket'))[0];
+    const navBtn = (await screen.findAllByRole('button', { name: /Run Investigation/i }))[0];
     fireEvent.click(navBtn);
 
-    fireEvent.change(await screen.findByPlaceholderText(/Terminal crash after update/), { target: { value: 'Test title' } });
-    fireEvent.click(await screen.findByText('Submit for AI Analysis'));
+    fireEvent.change(await screen.findByPlaceholderText(/Integrated terminal pty crash/i), { target: { value: 'Test title' } });
+    const submitBtn = (await screen.findAllByRole('button', { name: /Run Investigation/i }))[0];
+    fireEvent.click(submitBtn);
 
-    expect(await screen.findByText('LangGraph Execution Progress')).toBeInTheDocument();
+    expect(await screen.findByText(/Investigation Execution Progress/i)).toBeInTheDocument();
   });
 
   // 8. Pipeline result rendering
@@ -307,8 +323,8 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
     window.history.pushState({}, 'Run Details', '/runs/run_detail_1');
     render(<App />);
 
-    expect(await screen.findByText('Pipeline Analysis Details')).toBeInTheDocument();
-    expect(await screen.findByText('HIGH')).toBeInTheDocument();
+    expect(await screen.findByText('ID: run_detail_1')).toBeInTheDocument();
+    expect((await screen.findAllByText('HIGH'))[0]).toBeInTheDocument();
     expect(await screen.findByText('Update pty helper dependency to v2.1.')).toBeInTheDocument();
   });
 
@@ -343,9 +359,9 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
     window.history.pushState({}, 'Run Claims', '/runs/run_claims');
     render(<App />);
 
-    expect(await screen.findByText('Claim Verification & Faithfulness')).toBeInTheDocument();
+    expect(await screen.findByText(/Factual Claim Verification/i)).toBeInTheDocument();
     expect(await screen.findByText('"Pty process resets signal handlers."')).toBeInTheDocument();
-    expect(await screen.findByText('⚠ UNSUPPORTED')).toBeInTheDocument();
+    expect(await screen.findByText('UNSUPPORTED')).toBeInTheDocument();
   });
 
   // 10. Confidence rendering
@@ -367,15 +383,15 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
     window.history.pushState({}, 'Run Conf', '/runs/run_conf');
     render(<App />);
 
-    expect(await screen.findByText('94.2%')).toBeInTheDocument();
+    expect((await screen.findAllByText('94.2%'))[0]).toBeInTheDocument();
   });
 
   // 11. Escalation rendering
   it('11. Displays human escalation queue panel', async () => {
     render(<App />);
-    fireEvent.click(await screen.findByText('Escalation Queue'));
+    fireEvent.click(await screen.findByRole('link', { name: /Escalations/i }));
 
-    expect(await screen.findByText('Human Escalation Queue')).toBeInTheDocument();
+    expect((await screen.findAllByText('Human Escalation Queue'))[0]).toBeInTheDocument();
     expect(await screen.findByText('Escalated terminal bug')).toBeInTheDocument();
   });
 
@@ -434,7 +450,7 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
     render(<App />);
 
     await waitFor(() => {
-      expect(api.getRecentRuns).toHaveBeenCalledWith(20, 0);
+      expect(api.getRecentRuns).toHaveBeenCalledWith(20, 0, undefined);
     });
   });
 
@@ -483,14 +499,14 @@ describe('SupportPilot Frontend Integration Test Suite', () => {
     const row = await screen.findByText('Clickable ticket row');
     fireEvent.click(row);
 
-    expect(await screen.findByText('Pipeline Analysis Details')).toBeInTheDocument();
+    expect(await screen.findByText('ID: run_nav_test')).toBeInTheDocument();
   });
 
   // 18. No secret exposure
   it('18. Ensures no API keys or tokens are rendered in document DOM', async () => {
     const { container } = render(<App />);
 
-    await screen.findByText('Operations Dashboard');
+    await screen.findAllByText('AI Engineering Operations');
     expect(container.innerHTML).not.toContain('ghp_');
     expect(container.innerHTML).not.toContain('sk-');
     expect(container.innerHTML).not.toContain('GITHUB_TOKEN');

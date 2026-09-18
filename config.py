@@ -7,6 +7,12 @@ class Settings(BaseSettings):
     Application configuration settings validated via Pydantic.
     Loads values from environment variables or a local .env file.
     """
+    # Application Environment Mode: 'development' | 'production' | 'test'
+    app_env: str = "development"
+
+    # Server-to-Server Service Authentication Key
+    supportpilot_api_key: Optional[str] = None
+
     # GitHub Personal Access Token. Can be None for unauthenticated access (low rate limits).
     github_token: Optional[str] = None
     

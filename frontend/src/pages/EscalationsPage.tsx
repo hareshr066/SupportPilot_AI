@@ -51,14 +51,23 @@ export const EscalationsPage: React.FC = () => {
     <div>
       <div className="page-header">
         <div>
-          <h1 className="page-title">Human Escalation Queue</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+            <h1 className="page-title">
+              <ShieldAlert size={22} color="var(--warning)" />
+              Human Escalation Queue
+            </h1>
+            <span className="badge badge-warning">
+              {escalatedRuns.length} Pending
+            </span>
+          </div>
           <p className="page-subtitle">
-            Support tickets requiring engineering maintainer review due to claim verification gaps or confidence below threshold.
+            Tickets requiring engineering review due to low confidence or verification gaps.
           </p>
         </div>
 
         <button className="btn btn-secondary" onClick={fetchEscalations} disabled={loading}>
-          <RefreshCw size={14} className={loading ? 'spinner' : ''} /> Refresh Queue
+          <RefreshCw size={14} className={loading ? 'spinner' : ''} />
+          <span>Refresh Queue</span>
         </button>
       </div>
 
@@ -71,17 +80,20 @@ export const EscalationsPage: React.FC = () => {
 
       <div className="panel">
         <div className="panel-header">
-          <div className="panel-title" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <ShieldAlert size={18} color="#D97706" />
+          <div className="panel-title">
+            <ShieldAlert size={18} color="var(--warning)" />
             <span>Escalated Tickets ({escalatedRuns.length})</span>
           </div>
         </div>
 
         {loading ? (
-          <div className="empty-state">Loading escalation queue...</div>
+          <div className="empty-state" style={{ padding: '2.5rem' }}>
+            <div className="spinner" style={{ margin: '0 auto 0.5rem auto' }} />
+            <p style={{ fontSize: '0.85rem' }}>Loading escalation queue...</p>
+          </div>
         ) : escalatedRuns.length === 0 ? (
           <div className="empty-state">
-            <CheckCircle2 size={36} color="var(--success)" style={{ marginBottom: '0.5rem' }} />
+            <CheckCircle2 size={32} color="var(--success)" style={{ marginBottom: '0.5rem' }} />
             <p className="empty-state-title">Escalation queue is clear</p>
             <p className="empty-state-subtitle">No pending human review tickets in your active workspace.</p>
           </div>
@@ -93,35 +105,66 @@ export const EscalationsPage: React.FC = () => {
                   <th>Ticket Title</th>
                   <th>Repository</th>
                   <th>Severity</th>
-                  <th>Root Cause Cluster</th>
-                  <th>Calibrated Confidence</th>
-                  <th>Reason Code</th>
-                  <th>Action</th>
+                  <th>Root Cause</th>
+                  <th>Confidence</th>
+                  <th>Reason</th>
+                  <th style={{ textAlign: 'right' }}>Action</th>
                 </tr>
               </thead>
               <tbody>
                 {escalatedRuns.map((r) => (
-                  <tr key={r.pipeline_run_id} className="clickable-row" onClick={() => navigate(`/runs/${r.pipeline_run_id}`)}>
+                  <tr
+                    key={r.pipeline_run_id}
+                    className="clickable-row"
+                    onClick={() => navigate(`/runs/${r.pipeline_run_id}`)}
+                  >
                     <td>
-                      <div style={{ fontWeight: 600 }}>{r.title}</div>
-                      <div style={{ fontSize: '0.725rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
-                        Run ID: {r.pipeline_run_id.slice(0, 16)}...
+                      <div
+                        style={{
+                          fontWeight: 600,
+                          color: 'var(--text-main)',
+                          maxWidth: '300px',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          fontSize: '0.875rem',
+                        }}
+                        title={r.title}
+                      >
+                        {r.title}
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                        {r.pipeline_run_id.slice(0, 16)}...
                       </div>
                     </td>
-                    <td>{r.repository_name}</td>
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
+                      {r.repository_name}
+                    </td>
                     <td>
                       <SeverityBadge severity={r.severity} />
                     </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.8rem' }}>{r.root_cause_cluster}</td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>
-                      {(r.calibrated_confidence * 100).toFixed(1)}%
+                    <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.825rem', color: 'var(--text-secondary)' }}>
+                      {r.root_cause_cluster}
                     </td>
                     <td>
-                      <span className="badge badge-warning">Verification Failure / Low Confidence</span>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.875rem', color: '#FBBF24' }}>
+                        {(r.calibrated_confidence * 100).toFixed(1)}%
+                      </span>
                     </td>
                     <td>
-                      <button className="btn btn-secondary" style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}>
-                        Review Package <ArrowRight size={12} />
+                      <span className="badge badge-warning">Verification Gap</span>
+                    </td>
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        className="btn btn-secondary"
+                        style={{ padding: '0.3rem 0.65rem', fontSize: '0.775rem' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          navigate(`/runs/${r.pipeline_run_id}`);
+                        }}
+                      >
+                        <span>Review</span>
+                        <ArrowRight size={11} />
                       </button>
                     </td>
                   </tr>

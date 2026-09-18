@@ -2,7 +2,8 @@ import React from 'react';
 import { useNavigate } from 'react-router-dom';
 import type { RecentRunItem } from '../types/api';
 import { SeverityBadge } from './SeverityBadge';
-import { AlertTriangle, ArrowRight, ShieldAlert } from 'lucide-react';
+import { StatusBadge } from './StatusBadge';
+import { ArrowRight, CheckCircle2, ShieldAlert } from 'lucide-react';
 
 interface AttentionQueueProps {
   items: RecentRunItem[];
@@ -18,73 +19,132 @@ export const AttentionQueue: React.FC<AttentionQueueProps> = ({ items, onReview 
 
   if (escalatedItems.length === 0) {
     return (
-      <div className="panel">
-        <div className="panel-header">
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            <AlertTriangle size={16} color="var(--success)" />
-            <h3 className="panel-title">Needs Your Attention</h3>
+      <div
+        className="panel"
+        style={{
+          borderLeft: '3px solid var(--success)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          padding: '1.25rem 1.5rem',
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem' }}>
+          <CheckCircle2 size={22} color="var(--success)" />
+          <div>
+            <span style={{ fontWeight: 700, color: '#FFFFFF', fontSize: '1rem' }}>
+              All Clear
+            </span>
+            <span style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginLeft: '0.65rem' }}>
+              No pending engineering reviews.
+            </span>
           </div>
-          <span className="badge badge-success">0 Action Items</span>
         </div>
-        <div style={{ padding: '1rem', textAlign: 'center', color: 'var(--text-muted)', fontSize: '0.825rem' }}>
-          All analyzed issues are resolved or within automated confidence thresholds. No manual intervention required.
-        </div>
+        <span className="badge badge-success">0 Pending</span>
       </div>
     );
   }
 
   return (
-    <div className="panel" style={{ borderLeft: '4px solid #D97706' }}>
+    <div className="panel" style={{ borderLeft: '3px solid var(--warning)' }}>
       <div className="panel-header">
-        <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-          <ShieldAlert size={18} color="#D97706" />
-          <h3 className="panel-title">Needs Your Attention ({escalatedItems.length})</h3>
+        <div>
+          <div className="panel-title">
+            <ShieldAlert size={18} color="var(--warning)" />
+            <span>Needs Attention</span>
+            <span className="badge badge-warning" style={{ marginLeft: '0.4rem' }}>
+              {escalatedItems.length}
+            </span>
+          </div>
+          <div style={{ fontSize: '0.875rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+            Issues requiring engineering review before resolution.
+          </div>
         </div>
-        <span className="badge badge-warning">Human Escalation Required</span>
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-        {escalatedItems.map((item) => (
-          <div
-            key={item.pipeline_run_id}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
-              padding: '0.75rem 0.9rem',
-              background: '#FFFBEB',
-              border: '1px solid #FDE68A',
-              borderRadius: 'var(--radius-sm)'
-            }}
-          >
-            <div style={{ flex: 1, paddingRight: '1rem' }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', marginBottom: '0.2rem' }}>
-                <SeverityBadge severity={item.severity} />
-                <span style={{ fontSize: '0.75rem', fontWeight: 600, color: 'var(--text-muted)' }}>
-                  {item.repository_name} {item.issue_number ? `#${item.issue_number}` : ''}
-                </span>
-              </div>
-              <div style={{ fontWeight: 600, fontSize: '0.85rem', color: 'var(--text-main)' }}>
-                {item.title}
-              </div>
-              <div style={{ fontSize: '0.725rem', color: '#92400E', marginTop: '0.2rem' }}>
-                Reason: Verification failure or confidence below threshold ({Math.round(item.calibrated_confidence * 100)}%)
-              </div>
-            </div>
-
-            <button
-              className="btn btn-secondary"
-              onClick={() => {
-                if (onReview) onReview(item.pipeline_run_id);
-                navigate(`/runs/${item.pipeline_run_id}`);
-              }}
-              style={{ fontSize: '0.775rem', gap: '0.3rem', borderColor: '#FCD34D', background: '#FFFFFF' }}
-            >
-              <span>Review Handoff</span>
-              <ArrowRight size={13} />
-            </button>
-          </div>
-        ))}
+      <div className="table-container">
+        <table className="data-table">
+          <thead>
+            <tr>
+              <th style={{ width: '90px' }}>Severity</th>
+              <th style={{ minWidth: '280px' }}>Ticket</th>
+              <th>Repository</th>
+              <th>Confidence</th>
+              <th>Decision</th>
+              <th style={{ textAlign: 'right' }}>Action</th>
+            </tr>
+          </thead>
+          <tbody>
+            {escalatedItems.map((item) => {
+              const isHigh = item.severity === 'HIGH' || item.severity === 'CRITICAL';
+              return (
+                <tr
+                  key={item.pipeline_run_id}
+                  className="clickable-row"
+                  onClick={() => {
+                    if (onReview) onReview(item.pipeline_run_id);
+                    navigate(`/runs/${item.pipeline_run_id}`);
+                  }}
+                  style={{
+                    backgroundColor: isHigh ? 'rgba(248, 113, 113, 0.04)' : undefined,
+                  }}
+                >
+                  <td>
+                    <SeverityBadge severity={item.severity} />
+                  </td>
+                  <td>
+                    <div
+                      style={{
+                        fontWeight: 600,
+                        color: 'var(--text-main)',
+                        maxWidth: '340px',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                        fontSize: '0.925rem',
+                      }}
+                      title={item.title}
+                    >
+                      {item.title}
+                    </div>
+                  </td>
+                  <td style={{ fontFamily: 'var(--font-mono)', fontSize: '0.875rem', color: 'var(--text-secondary)' }}>
+                    {item.repository_name}
+                  </td>
+                  <td>
+                    <span
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontWeight: 700,
+                        fontSize: '0.95rem',
+                        color: item.calibrated_confidence >= 0.85 ? 'var(--success)' : 'var(--warning)',
+                      }}
+                    >
+                      {(item.calibrated_confidence * 100).toFixed(1)}%
+                    </span>
+                  </td>
+                  <td>
+                    <StatusBadge decision={item.final_decision} status={item.status} />
+                  </td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button
+                      className="btn btn-secondary"
+                      style={{ padding: '0.35rem 0.7rem', fontSize: '0.8rem' }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (onReview) onReview(item.pipeline_run_id);
+                        navigate(`/runs/${item.pipeline_run_id}`);
+                      }}
+                    >
+                      <span>Review</span>
+                      <ArrowRight size={12} />
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
       </div>
     </div>
   );

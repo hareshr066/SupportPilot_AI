@@ -37,6 +37,30 @@ class TicketAnalyzeRequest(BaseModel):
         return v.strip()
 
 
+class ExternalTicketCreate(BaseModel):
+    title: str = Field(..., min_length=1, description="Ticket title (non-empty)")
+    description: Optional[str] = Field("", description="Detailed issue description")
+    application: Optional[str] = Field("StudySync", description="Target application name")
+    environment: Optional[str] = Field("production", description="Environment")
+    feature: Optional[str] = Field(None, description="Feature component tag")
+
+    @field_validator("title")
+    @classmethod
+    def validate_title_non_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("Ticket title must not be empty or whitespace only.")
+        return v.strip()
+
+
+class ExternalTicketResponse(BaseModel):
+    ticket_id: str = Field(..., description="Stable public ticket identifier, e.g. SP-1042")
+    status: str = Field("RECEIVED", description="Status string")
+    application: str = Field("StudySync", description="Application name")
+    title: Optional[str] = None
+    description: Optional[str] = None
+    created_at: Optional[str] = None
+
+
 # =====================================================================
 # ERROR RESPONSE SCHEMAS
 # =====================================================================

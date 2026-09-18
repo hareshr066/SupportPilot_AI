@@ -130,6 +130,7 @@ venv.bak/
 # PyCharm settings
 .idea/
 
-# Local Data Storage
+# Local Data Storage & Artifacts
 data/
+artifacts/
 *.json

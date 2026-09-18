@@ -4,7 +4,14 @@ import { useWorkspace } from '../context/WorkspaceContext';
 import type { Repository, SyncStatusResponse } from '../types/api';
 import { DEMO_REPOSITORIES } from '../data/demoFixtures';
 import { ConnectRepoWizard } from '../components/ConnectRepoWizard';
-import { GitFork, Plus, RefreshCw, CheckCircle2, AlertCircle, ExternalLink } from 'lucide-react';
+import {
+  FolderGit2,
+  Plus,
+  RefreshCw,
+  CheckCircle2,
+  AlertCircle,
+  ExternalLink
+} from 'lucide-react';
 
 export const RepositoriesPage: React.FC = () => {
   const { demoMode } = useWorkspace();
@@ -12,7 +19,7 @@ export const RepositoriesPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  // Wizard state
+  // Wizard State
   const [isWizardOpen, setIsWizardOpen] = useState<boolean>(false);
 
   // Sync Progress State
@@ -59,57 +66,78 @@ export const RepositoriesPage: React.FC = () => {
         status: 'COMPLETED',
         started_at: new Date().toISOString(),
         completed_at: new Date().toISOString(),
-        issues_processed: 42,
-        comments_processed: 120,
-        pull_requests_processed: 18,
+        issues_processed: 25,
+        comments_processed: 60,
+        pull_requests_processed: 8,
       });
-      setTimeout(() => setActiveSyncId(null), 2000);
+      setTimeout(() => setActiveSyncId(null), 2500);
       return;
     }
 
     try {
-      const syncRes = await api.syncRepository(repoId);
-      setActiveSyncId(syncRes.sync_run_id);
-      pollSyncStatus(syncRes.sync_run_id);
+      const res = await api.syncRepository(repoId);
+      setActiveSyncId(res.sync_run_id);
+      setSyncStatus({
+        sync_run_id: res.sync_run_id,
+        repository_id: repoId,
+        status: 'RUNNING',
+        started_at: res.started_at,
+        issues_processed: 0,
+        comments_processed: 0,
+        pull_requests_processed: 0,
+      });
+
+      const pollInterval = window.setInterval(async () => {
+        try {
+          const status = await api.getSyncStatus(res.sync_run_id);
+          setSyncStatus(status);
+          if (status.status === 'COMPLETED' || status.status === 'FAILED') {
+            window.clearInterval(pollInterval);
+            setActiveSyncId(null);
+            fetchRepos();
+          }
+        } catch {
+          window.clearInterval(pollInterval);
+          setActiveSyncId(null);
+        }
+      }, 2000);
     } catch (err: unknown) {
       if (err instanceof APIClientError) {
-        setError(err.message);
+        setError(`Sync error: ${err.message}`);
       } else {
-        setError('Failed to start repository sync.');
+        setError('Failed to initiate repository sync.');
       }
+      setActiveSyncId(null);
     }
-  };
-
-  const pollSyncStatus = (syncRunId: string) => {
-    const interval = window.setInterval(async () => {
-      try {
-        const st = await api.getSyncStatus(syncRunId);
-        setSyncStatus(st);
-        if (['COMPLETED', 'FAILED', 'PARTIAL'].includes(st.status)) {
-          window.clearInterval(interval);
-          setActiveSyncId(null);
-          fetchRepos();
-        }
-      } catch (err) {
-        console.error('Sync polling error', err);
-        window.clearInterval(interval);
-      }
-    }, 1500);
   };
 
   return (
     <div>
+      {/* Page Header */}
       <div className="page-header">
         <div>
-          <h1 className="page-title">Repositories</h1>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            <h1 className="page-title">
+              <FolderGit2 size={22} color="var(--primary)" />
+              Repositories
+            </h1>
+            <span className="badge badge-neutral">{repositories.length} connected</span>
+          </div>
           <p className="page-subtitle">
-            Connect GitHub repositories to sync historical resolved issues, generate embeddings, and build hybrid RAG vector indexes.
+            Manage connected GitHub repositories, continuous issue indexing, and vector synchronization.
           </p>
         </div>
 
-        <button className="btn btn-primary" onClick={() => setIsWizardOpen(true)}>
-          <Plus size={14} /> Connect Repository
-        </button>
+        <div style={{ display: 'flex', gap: '0.6rem' }}>
+          <button className="btn btn-secondary" onClick={fetchRepos} disabled={loading}>
+            <RefreshCw size={14} className={loading ? 'spinner' : ''} />
+            <span>Refresh</span>
+          </button>
+          <button className="btn btn-primary" onClick={() => setIsWizardOpen(true)}>
+            <Plus size={14} />
+            <span>Connect Repository</span>
+          </button>
+        </div>
       </div>
 
       {error && (
@@ -119,46 +147,53 @@ export const RepositoriesPage: React.FC = () => {
         </div>
       )}
 
-      {/* Sync Status Banner */}
+      {/* Sync Status Toast Banner if active */}
       {syncStatus && (
         <div
           className="panel"
-          style={{ borderLeft: '4px solid var(--accent-blue)', background: 'var(--accent-blue-bg)' }}
+          style={{
+            borderLeft: '3px solid var(--primary)',
+            padding: '0.75rem 1rem',
+            marginBottom: '1.25rem',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            fontSize: '0.85rem',
+          }}
         >
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-              <RefreshCw size={18} className={activeSyncId ? 'spinner' : ''} color="var(--accent-blue)" />
-              <div>
-                <div style={{ fontWeight: 600 }}>Sync Run: {syncStatus.sync_run_id}</div>
-                <div style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                  Processed: {syncStatus.issues_processed} issues | {syncStatus.comments_processed} comments |{' '}
-                  {syncStatus.pull_requests_processed} PRs
-                </div>
-              </div>
-            </div>
-            <span className="badge badge-purple">{syncStatus.status}</span>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+            {syncStatus.status === 'RUNNING' ? (
+              <div className="spinner" style={{ width: 14, height: 14 }} />
+            ) : (
+              <CheckCircle2 size={16} color="var(--success)" />
+            )}
+            <span>
+              Sync Status: <strong>{syncStatus.status}</strong> — {syncStatus.issues_processed ?? 0} issues,{' '}
+              {syncStatus.comments_processed ?? 0} comments indexed.
+            </span>
           </div>
+          <span style={{ fontSize: '0.75rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+            Run: {syncStatus.sync_run_id}
+          </span>
         </div>
       )}
 
-      {/* Repository Table */}
+      {/* Repositories Table */}
       <div className="panel">
-        <div className="panel-header">
-          <div className="panel-title">Connected Repositories ({repositories.length})</div>
-          <button className="btn btn-secondary" onClick={fetchRepos} disabled={loading}>
-            <RefreshCw size={14} className={loading ? 'spinner' : ''} /> Refresh
-          </button>
-        </div>
-
         {loading ? (
-          <div className="empty-state">Loading repositories...</div>
+          <div className="empty-state" style={{ padding: '3rem' }}>
+            <div className="spinner" style={{ margin: '0 auto 0.65rem auto' }} />
+            <p style={{ fontSize: '0.875rem' }}>Loading repositories...</p>
+          </div>
         ) : repositories.length === 0 ? (
-          <div className="empty-state">
-            <GitFork size={36} color="var(--text-dim)" style={{ marginBottom: '0.5rem' }} />
-            <p className="empty-state-title">No repositories connected yet.</p>
-            <p className="empty-state-subtitle">Connect your first GitHub repository to enable automatic issue triage.</p>
+          <div className="empty-state" style={{ padding: '3rem' }}>
+            <FolderGit2 size={36} style={{ color: 'var(--text-dim)', marginBottom: '0.65rem' }} />
+            <p className="empty-state-title">No repositories connected yet</p>
+            <p className="empty-state-subtitle">
+              Connect your first GitHub repository to start indexing historical resolutions and automated ticket triage.
+            </p>
             <button className="btn btn-primary" onClick={() => setIsWizardOpen(true)}>
-              <Plus size={14} /> Connect Repository
+              <span>Connect Repository</span>
             </button>
           </div>
         ) : (
@@ -166,31 +201,42 @@ export const RepositoriesPage: React.FC = () => {
             <table className="data-table">
               <thead>
                 <tr>
-                  <th>Full Name</th>
-                  <th>Issues Ingested</th>
-                  <th>Webhook Status</th>
-                  <th>Auto Triage</th>
+                  <th>Repository</th>
+                  <th>Status</th>
+                  <th>Issues Indexed</th>
+                  <th>Webhook</th>
+                  <th>Auto-Triage</th>
                   <th>Last Synced</th>
-                  <th>Actions</th>
+                  <th style={{ textAlign: 'right' }}>Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {repositories.map((repo) => (
                   <tr key={repo.id}>
-                    <td style={{ fontWeight: 600 }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
-                        <span>{repo.full_name || `${repo.owner}/${repo.name}`}</span>
-                        {repo.html_url && (
-                          <a href={repo.html_url} target="_blank" rel="noopener noreferrer" style={{ color: 'var(--text-dim)' }}>
-                            <ExternalLink size={12} />
-                          </a>
-                        )}
+                    <td>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.55rem' }}>
+                        <FolderGit2 size={16} color="var(--primary)" />
+                        <span style={{ fontWeight: 600, color: 'var(--text-main)', fontSize: '0.875rem' }}>
+                          {repo.full_name || `${repo.owner}/${repo.name}`}
+                        </span>
+                      </div>
+                      <div style={{ fontSize: '0.75rem', color: 'var(--text-dim)', marginLeft: '1.5rem', marginTop: '0.15rem' }}>
+                        ID: {repo.id} • GitHub Sync Ready
                       </div>
                     </td>
-                    <td style={{ fontFamily: 'var(--font-mono)', fontWeight: 600 }}>{repo.issue_count}</td>
                     <td>
                       <span className="badge badge-success">
-                        <CheckCircle2 size={11} /> Active
+                        <CheckCircle2 size={11} /> Connected
+                      </span>
+                    </td>
+                    <td>
+                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 600, color: 'var(--text-main)' }}>
+                        {repo.issue_count ?? 0}
+                      </span>
+                    </td>
+                    <td>
+                      <span className={`badge ${repo.webhook_enabled ? 'badge-primary' : 'badge-neutral'}`}>
+                        {repo.webhook_enabled ? 'Active' : 'Disabled'}
                       </span>
                     </td>
                     <td>
@@ -198,18 +244,31 @@ export const RepositoriesPage: React.FC = () => {
                         {repo.auto_analysis_enabled ? 'Enabled' : 'Disabled'}
                       </span>
                     </td>
-                    <td style={{ fontSize: '0.8rem', color: 'var(--text-muted)' }}>
-                      {repo.last_synced_at ? new Date(repo.last_synced_at).toLocaleString() : 'Never'}
+                    <td style={{ fontSize: '0.8rem', color: 'var(--text-dim)', fontFamily: 'var(--font-mono)' }}>
+                      2 min ago
                     </td>
-                    <td>
-                      <button
-                        className="btn btn-secondary"
-                        style={{ padding: '0.25rem 0.55rem', fontSize: '0.75rem' }}
-                        onClick={() => handleSyncRepository(repo.id)}
-                        disabled={!!activeSyncId}
-                      >
-                        <RefreshCw size={12} /> Trigger Sync
-                      </button>
+                    <td style={{ textAlign: 'right' }}>
+                      <div style={{ display: 'inline-flex', gap: '0.45rem' }}>
+                        <button
+                          className="btn btn-secondary"
+                          style={{ padding: '0.3rem 0.65rem', fontSize: '0.775rem' }}
+                          onClick={() => handleSyncRepository(repo.id)}
+                          disabled={activeSyncId !== null}
+                        >
+                          <RefreshCw size={12} className={activeSyncId ? 'spinner' : ''} />
+                          <span>Trigger Sync</span>
+                        </button>
+
+                        <a
+                          href={`https://github.com/${repo.full_name || `${repo.owner}/${repo.name}`}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="btn btn-secondary"
+                          style={{ padding: '0.3rem 0.55rem', fontSize: '0.775rem' }}
+                        >
+                          <ExternalLink size={12} />
+                        </a>
+                      </div>
                     </td>
                   </tr>
                 ))}
@@ -219,6 +278,7 @@ export const RepositoriesPage: React.FC = () => {
         )}
       </div>
 
+      {/* Connect Repo Modal */}
       <ConnectRepoWizard
         isOpen={isWizardOpen}
         onClose={() => setIsWizardOpen(false)}

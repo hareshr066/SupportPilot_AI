@@ -38,13 +38,49 @@ class GitHubClient:
         
         # Use provided token, fallback to settings token
         auth_token = token or settings.github_token
-        if auth_token:
-            headers["Authorization"] = f"Bearer {auth_token}"
+        if auth_token and auth_token.strip():
+            headers["Authorization"] = f"Bearer {auth_token.strip()}"
             logger.info("GitHubClient session configured with Bearer token authentication.")
         else:
             logger.warning("GitHubClient initialized without token. Unauthenticated requests have lower rate limits.")
             
         self.session.headers.update(headers)
+
+    @property
+    def is_authenticated(self) -> bool:
+        """Returns True if the client is configured with a valid Bearer token."""
+        return "Authorization" in self.session.headers
+
+    def get_auth_status_summary(self) -> str:
+        """
+        Returns a safe human-readable authentication status string without exposing credentials.
+        """
+        if self.is_authenticated:
+            return "Connected (Authenticated)"
+        return "GitHub authentication not configured"
+
+    def get_rate_limit_info(self) -> Dict[str, Any]:
+        """
+        Safely queries GitHub rate limit status without leaking secrets.
+        """
+        try:
+            resp = self._request("GET", f"{self.base_url}/rate_limit", max_retries=1)
+            data = resp.json()
+            core = data.get("resources", {}).get("core", {})
+            return {
+                "authenticated": self.is_authenticated,
+                "status": self.get_auth_status_summary(),
+                "limit": core.get("limit", 60 if not self.is_authenticated else 5000),
+                "remaining": core.get("remaining", 0),
+                "reset_epoch": core.get("reset", 0),
+            }
+        except Exception as exc:
+            logger.warning(f"Failed to fetch GitHub rate limit: {exc}")
+            return {
+                "authenticated": self.is_authenticated,
+                "status": self.get_auth_status_summary(),
+                "error": "Rate limit query failed"
+            }
 
     def _request(
         self,

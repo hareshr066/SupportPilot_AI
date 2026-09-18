@@ -67,6 +67,15 @@ def get_readiness(
         logger.warning(f"Readiness check warning for models: {exc}")
         checks["models"] = "unknown"
 
+    # 4. Check GitHub Authentication Status (Safe indicator, never exposes tokens)
+    try:
+        from app.services.github_client import GitHubClient
+        gh_client = GitHubClient()
+        checks["github"] = gh_client.get_auth_status_summary()
+    except Exception as exc:
+        logger.warning(f"Readiness check warning for github client: {exc}")
+        checks["github"] = "unknown"
+
     if not is_ready:
         response.status_code = status.HTTP_503_SERVICE_UNAVAILABLE
         return ReadinessResponse(status="not_ready", checks=checks)

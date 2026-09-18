@@ -24,7 +24,7 @@ from app.database.models import Issue, Repository
 from fastapi import Query
 
 logger = logging.getLogger("supportpilot.api.runs")
-router = APIRouter(prefix="/api/v1/runs", tags=["Pipeline Execution Query"])
+router = APIRouter(tags=["Pipeline Execution Query"])
 
 
 @router.get(

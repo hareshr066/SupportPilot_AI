@@ -67,10 +67,12 @@ def create_app() -> FastAPI:
     app.add_exception_handler(StarletteHTTPException, http_exception_handler)
     app.add_exception_handler(Exception, unhandled_exception_handler)
 
-    # 4. Include Routers
+    # 4. Include Routers (Supporting both /v1 for external service contracts & /api/v1 for React frontend)
     app.include_router(health_router)
-    app.include_router(tickets_router)
-    app.include_router(runs_router)
+    app.include_router(tickets_router, prefix="/v1/tickets")
+    app.include_router(tickets_router, prefix="/api/v1/tickets")
+    app.include_router(runs_router, prefix="/v1/runs")
+    app.include_router(runs_router, prefix="/api/v1/runs")
     app.include_router(repositories_router)
     app.include_router(webhooks_router)
     app.include_router(dashboard_router)
