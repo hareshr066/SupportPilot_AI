@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 
 export type CloudShaderProps = {
@@ -27,12 +27,12 @@ void main() {
 }
 `;
 
-// Original cloud shader for Aceternity UI.
-// Each cloud is an asymmetric envelope (dome top, flat base) filled with
-// domain-warped billow noise. A second density sample above the pixel
-// approximates self-shadowing. Clouds drift horizontally and wrap around.
 const FRAG = `
+#ifdef GL_FRAGMENT_PRECISION_HIGH
 precision highp float;
+#else
+precision mediump float;
+#endif
 
 varying vec2 v_uv;
 
@@ -71,7 +71,6 @@ float fbm(vec2 p) {
   return sum;
 }
 
-// billow noise: sharp puffy ridges, like cauliflower cloud tops
 float billow(vec2 p) {
   float sum = 0.0;
   float amp = 0.5;
@@ -83,32 +82,25 @@ float billow(vec2 p) {
   return sum;
 }
 
-// raw density for one cloud at point p
 float cloudDensity(vec2 p, vec2 c, vec2 r, float seed, float t) {
   vec2 q = p - c;
-
-  // envelope: dome above the center, flat base below
   float ry = q.y > 0.0 ? r.y : r.y * 0.42;
   float env = 1.0 - length(vec2(q.x / r.x, q.y / ry));
   if (env < -0.35) return 0.0;
 
-  // domain-warped billow detail, moves with the cloud, evolves slowly
   vec2 dp = q * (2.4 / r.x) + seed;
   dp += 0.6 * vec2(
     fbm(dp * 1.4 + t * 0.04),
     fbm(dp * 1.4 + 7.7 - t * 0.03)
   );
   float detail = billow(dp * 1.6);
-
   return env + (detail - 0.62) * 0.62;
 }
 
-// shades one cloud and blends it over the current color
 vec3 shadeCloud(vec3 color, vec3 sky, vec2 p, vec2 c, vec2 r, float seed, float t, float dist) {
   float d = cloudDensity(p, c, r, seed, t);
   if (d < 0.02) return color;
 
-  // sample density toward the sun (straight up) for self-shadowing
   float dUp = cloudDensity(p + vec2(0.0, r.y * 0.55), c, r, seed, t);
   float occl = clamp((dUp - d) * 1.1 + d * 0.55, 0.0, 1.0);
 
@@ -117,19 +109,15 @@ vec3 shadeCloud(vec3 color, vec3 sky, vec2 p, vec2 c, vec2 r, float seed, float 
   vec3 cloudCol = mix(lit, shadow, occl * 0.85);
 
   float alpha = smoothstep(0.02, 0.38, d);
-
-  // silver lining on thin edges
   float rim = smoothstep(0.02, 0.14, d) * (1.0 - smoothstep(0.14, 0.40, d));
   cloudCol += rim * 0.10;
 
-  // atmospheric perspective: far clouds fade into the sky
   cloudCol = mix(cloudCol, sky, dist * 0.35);
   alpha *= mix(1.0, 0.8, dist);
 
   return mix(color, cloudCol, alpha);
 }
 
-// one drifting cloud: horizontal wrap + gentle vertical bob (drifting right-to-left past the aircraft)
 vec3 cloudPass(vec3 color, vec3 sky, vec2 p, float aspect, float t,
                float spd, float phase, float y, vec2 r, float seed, float dist) {
   float cx = mix(aspect + r.x + 0.25, -r.x - 0.25, fract(t * spd + phase));
@@ -145,15 +133,12 @@ void main() {
   vec3 sky = mix(u_skyBottom, u_skyTop, v_uv.y);
   vec3 color = sky;
 
-  // faint haze band near the horizon
   color = mix(color, u_skyBottom * 1.06, smoothstep(0.35, 0.0, v_uv.y) * 0.5);
 
-  // soft sun glow, upper area
   vec2 sunPos = vec2(aspect * 0.78, 0.92);
   float sunDist = length(p - sunPos);
   color += vec3(1.0, 0.95, 0.82) * exp(-sunDist * sunDist * 5.0) * 0.28;
 
-  // thin cirrus streaks, stretched horizontally, high in the sky
   float cirrusBand = smoothstep(0.55, 0.8, v_uv.y) * (1.0 - smoothstep(0.9, 1.0, v_uv.y));
   if (cirrusBand > 0.01) {
     float streak = fbm(vec2(p.x * 1.6 + t * 0.008, p.y * 12.0));
@@ -161,23 +146,18 @@ void main() {
     color = mix(color, u_cloud * 0.98, wisp * 0.35);
   }
 
-  // far layer: small, high, slow
   if (u_count > 5.5) {
     color = cloudPass(color, sky, p, aspect, t, 0.035, 0.10, 0.84, vec2(0.20, 0.10), 43.7, 1.0);
   }
   if (u_count > 4.5) {
     color = cloudPass(color, sky, p, aspect, t, 0.048, 0.62, 0.73, vec2(0.24, 0.12), 71.3, 0.85);
   }
-
-  // middle layer
   if (u_count > 3.5) {
     color = cloudPass(color, sky, p, aspect, t, 0.065, 0.33, 0.60, vec2(0.34, 0.16), 17.3, 0.55);
   }
   if (u_count > 2.5) {
     color = cloudPass(color, sky, p, aspect, t, 0.082, 0.80, 0.47, vec2(0.30, 0.15), 29.9, 0.45);
   }
-
-  // near layer: big, low, fast
   if (u_count > 1.5) {
     color = cloudPass(color, sky, p, aspect, t, 0.105, 0.05, 0.35, vec2(0.46, 0.20), 91.1, 0.15);
   }
@@ -217,6 +197,7 @@ function compile(gl: WebGLRenderingContext, type: number, source: string) {
   gl.shaderSource(shader, source);
   gl.compileShader(shader);
   if (!gl.getShaderParameter(shader, gl.COMPILE_STATUS)) {
+    console.warn("CloudShader compilation error:", gl.getShaderInfoLog(shader));
     gl.deleteShader(shader);
     return null;
   }
@@ -228,11 +209,12 @@ export const CloudShader = ({
   children,
   speed = 1,
   count = 6,
-  cloudColor = "#fbf8f2",
-  skyTopColor = "#3876ba",
-  skyBottomColor = "#8cbfe8",
+  cloudColor = "#FFFFFF",
+  skyTopColor = "#1D4ED8",
+  skyBottomColor = "#93C5FD",
 }: CloudShaderProps) => {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const [useFallback2D, setUseFallback2D] = useState(false);
   const paramsRef = useRef({
     speed,
     count,
@@ -249,7 +231,10 @@ export const CloudShader = ({
     skyBottomColor,
   };
 
+  // ─── Primary WebGL Renderer ───
   useEffect(() => {
+    if (useFallback2D) return;
+
     const canvas = canvasRef.current;
     if (!canvas) return;
 
@@ -259,24 +244,40 @@ export const CloudShader = ({
         alpha: false,
         antialias: false,
         premultipliedAlpha: false,
+        preserveDrawingBuffer: true,
       });
     } catch {
-      // In non-WebGL or test environment, fallback gracefully
+      setUseFallback2D(true);
       return;
     }
-    if (!gl) return;
+    if (!gl) {
+      setUseFallback2D(true);
+      return;
+    }
 
     const vert = compile(gl, gl.VERTEX_SHADER, VERT);
     const frag = compile(gl, gl.FRAGMENT_SHADER, FRAG);
-    if (!vert || !frag) return;
+    if (!vert || !frag) {
+      setUseFallback2D(true);
+      return;
+    }
 
     const program = gl.createProgram();
-    if (!program) return;
+    if (!program) {
+      setUseFallback2D(true);
+      return;
+    }
+
     gl.attachShader(program, vert);
     gl.attachShader(program, frag);
     gl.bindAttribLocation(program, 0, "a_pos");
     gl.linkProgram(program);
-    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) return;
+    if (!gl.getProgramParameter(program, gl.LINK_STATUS)) {
+      console.warn("CloudShader program link error:", gl.getProgramInfoLog(program));
+      setUseFallback2D(true);
+      return;
+    }
+
     gl.useProgram(program);
 
     const buffer = gl.createBuffer();
@@ -307,30 +308,15 @@ export const CloudShader = ({
 
     let frame = 0;
     let running = true;
-    const reduceMotion = typeof window !== 'undefined' && window.matchMedia
+    const reduceMotion = typeof window !== "undefined" && window.matchMedia
       ? window.matchMedia("(prefers-reduced-motion: reduce)").matches
       : false;
-
-    const resize = () => {
-      const rect = canvas.getBoundingClientRect();
-      const w = Math.max(1, Math.floor(rect.width || canvas.clientWidth || 1200));
-      const h = Math.max(1, Math.floor(rect.height || canvas.clientHeight || 360));
-      if (canvas.width !== w || canvas.height !== h) {
-        canvas.width = w;
-        canvas.height = h;
-        gl.viewport(0, 0, w, h);
-        gl.uniform2f(loc.res, w, h);
-      }
-    };
-
-    window.addEventListener("resize", resize);
-    resize();
 
     let lastTime = performance.now();
     let accumulatedTime = 0;
 
     const draw = (now: number) => {
-      if (!running) return;
+      if (!running || !gl || !canvas) return;
 
       const rect = canvas.getBoundingClientRect();
       const targetW = Math.max(1, Math.floor(rect.width || canvas.clientWidth || 1200));
@@ -339,8 +325,10 @@ export const CloudShader = ({
         canvas.width = targetW;
         canvas.height = targetH;
         gl.viewport(0, 0, targetW, targetH);
-        gl.uniform2f(loc.res, targetW, targetH);
       }
+
+      gl.useProgram(program);
+      gl.uniform2f(loc.res, targetW, targetH);
 
       const delta = Math.min((now - lastTime) / 1000, 0.1);
       lastTime = now;
@@ -357,6 +345,7 @@ export const CloudShader = ({
       gl.uniform3f(loc.cloud, cloud[0], cloud[1], cloud[2]);
       gl.uniform3f(loc.skyTop, skyTop[0], skyTop[1], skyTop[2]);
       gl.uniform3f(loc.skyBottom, skyBottom[0], skyBottom[1], skyBottom[2]);
+
       gl.drawArrays(gl.TRIANGLES, 0, 6);
       frame = requestAnimationFrame(draw);
     };
@@ -366,25 +355,130 @@ export const CloudShader = ({
     return () => {
       running = false;
       cancelAnimationFrame(frame);
-      window.removeEventListener("resize", resize);
-      gl.deleteBuffer(buffer);
-      gl.deleteProgram(program);
-      gl.deleteShader(vert);
-      gl.deleteShader(frag);
+      if (gl) {
+        gl.deleteBuffer(buffer);
+        gl.deleteProgram(program);
+        gl.deleteShader(vert);
+        gl.deleteShader(frag);
+      }
     };
-  }, []);
+  }, [useFallback2D]);
+
+  // ─── High-Performance Canvas 2D Fallback Engine ───
+  useEffect(() => {
+    if (!useFallback2D) return;
+
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const ctx = canvas.getContext("2d");
+    if (!ctx) return;
+
+    let frame = 0;
+    let running = true;
+    let t = 0;
+    let last = performance.now();
+
+    // Generate deterministic procedural cloud puffs
+    const clouds = [
+      { xPct: 0.1, yPct: 0.25, scale: 1.4, speed: 0.08, opacity: 0.85 },
+      { xPct: 0.4, yPct: 0.40, scale: 1.1, speed: 0.06, opacity: 0.75 },
+      { xPct: 0.7, yPct: 0.20, scale: 1.6, speed: 0.09, opacity: 0.90 },
+      { xPct: 0.85, yPct: 0.55, scale: 0.9, speed: 0.05, opacity: 0.65 },
+      { xPct: 0.25, yPct: 0.65, scale: 1.2, speed: 0.07, opacity: 0.80 },
+    ];
+
+    const drawPuffyCloud = (cx: number, cy: number, scale: number, alpha: number) => {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+
+      const w = 180 * scale;
+      const h = 55 * scale;
+
+      // Cloud shadow & base
+      ctx.fillStyle = "rgba(255, 255, 255, 0.92)";
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, w * 0.5, h * 0.45, 0, 0, Math.PI * 2);
+      ctx.fill();
+
+      // Top puffs
+      ctx.beginPath();
+      ctx.arc(cx - w * 0.22, cy - h * 0.25, h * 0.65, 0, Math.PI * 2);
+      ctx.arc(cx + w * 0.05, cy - h * 0.40, h * 0.85, 0, Math.PI * 2);
+      ctx.arc(cx + w * 0.28, cy - h * 0.20, h * 0.55, 0, Math.PI * 2);
+      ctx.fillStyle = "rgba(255, 255, 255, 0.95)";
+      ctx.fill();
+
+      ctx.restore();
+    };
+
+    const render = (now: number) => {
+      if (!running || !canvas || !ctx) return;
+
+      const rect = canvas.getBoundingClientRect();
+      const w = Math.max(1, Math.floor(rect.width || canvas.clientWidth || 1200));
+      const h = Math.max(1, Math.floor(rect.height || canvas.clientHeight || 360));
+      if (canvas.width !== w || canvas.height !== h) {
+        canvas.width = w;
+        canvas.height = h;
+      }
+
+      const dt = Math.min((now - last) / 1000, 0.1);
+      last = now;
+      t += dt * paramsRef.current.speed;
+
+      // 1. Sky Gradient Background
+      const grad = ctx.createLinearGradient(0, 0, 0, h);
+      grad.addColorStop(0, paramsRef.current.skyTopColor || "#1D4ED8");
+      grad.addColorStop(1, paramsRef.current.skyBottomColor || "#93C5FD");
+      ctx.fillStyle = grad;
+      ctx.fillRect(0, 0, w, h);
+
+      // 2. Sun Glow
+      const sunGrad = ctx.createRadialGradient(w * 0.8, h * 0.15, 10, w * 0.8, h * 0.15, 180);
+      sunGrad.addColorStop(0, "rgba(255, 245, 210, 0.35)");
+      sunGrad.addColorStop(1, "rgba(255, 245, 210, 0)");
+      ctx.fillStyle = sunGrad;
+      ctx.fillRect(0, 0, w, h);
+
+      // 3. Drifting Clouds
+      clouds.forEach((c) => {
+        const drift = (c.xPct - t * c.speed * 0.1) % 1.3;
+        const cx = (drift < -0.3 ? drift + 1.3 : drift) * w;
+        const cy = c.yPct * h + Math.sin(t * 0.5 + c.xPct * 10) * 4;
+        drawPuffyCloud(cx, cy, c.scale, c.opacity);
+      });
+
+      frame = requestAnimationFrame(render);
+    };
+
+    frame = requestAnimationFrame(render);
+
+    return () => {
+      running = false;
+      cancelAnimationFrame(frame);
+    };
+  }, [useFallback2D]);
 
   return (
     <div
-      className={cn(
-        "relative h-full w-full overflow-hidden",
-        className,
-      )}
-      style={{ position: 'absolute', inset: 0, width: '100%', height: '100%' }}
+      className={cn("relative h-full w-full overflow-hidden", className)}
+      style={{
+        position: "absolute",
+        inset: 0,
+        width: "100%",
+        height: "100%",
+        background: "linear-gradient(135deg, #1D4ED8 0%, #2563EB 40%, #60A5FA 80%, #93C5FD 100%)",
+      }}
     >
       <canvas
         ref={canvasRef}
-        style={{ display: 'block', width: '100%', height: '100%', position: 'absolute', inset: 0 }}
+        style={{
+          display: "block",
+          width: "100%",
+          height: "100%",
+          position: "absolute",
+          inset: 0,
+        }}
       />
       {children ? (
         <div className="relative z-10 flex h-full w-full items-center justify-center">
