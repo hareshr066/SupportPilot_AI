@@ -89,8 +89,8 @@ def classify_claim_criticality(claim_text: str) -> Tuple[bool, bool]:
     is_critical = any(kw in text_lower for kw in critical_keywords)
 
     destructive_keywords = [
-        "delete", "rm ", "drop ", "truncate", "migration", "permission",
-        "chmod", "chown", "sudo", "credential", "reset", "purge", "destroy"
+        "delete ", "rm -", "drop table", "truncate ", "migration", "permission",
+        "chmod", "chown", "sudo", "credential", "hard reset", "purge", "destroy"
     ]
     is_destructive = any(kw in text_lower for kw in destructive_keywords)
 

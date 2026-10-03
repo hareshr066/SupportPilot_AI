@@ -131,6 +131,10 @@ venv.bak/
 .idea/
 
 # Local Data Storage & Artifacts
-data/
+data/*
+!data/confidence_models/
+!data/routing_models/
 artifacts/
 *.json
+.neon
+node_modules/

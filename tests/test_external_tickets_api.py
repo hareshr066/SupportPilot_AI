@@ -42,6 +42,8 @@ def client():
     test_app.dependency_overrides.clear()
 
 
+
+
 def test_create_external_ticket_success(client):
     """Verify POST /v1/tickets creates persistent ticket and returns SP-XXXX ID."""
     payload = {

@@ -1,5 +1,5 @@
-from pydantic import BaseModel, Field
-from typing import List, Optional, Dict, Any
+from pydantic import BaseModel, Field, field_validator
+from typing import List, Optional, Dict, Any, Union
 
 
 class ResolutionRequest(BaseModel):
@@ -35,17 +35,54 @@ class EvidencePackage(BaseModel):
 
 
 class ResolutionStep(BaseModel):
-    step: int = Field(..., description="1-indexed step sequence number")
-    instruction: str = Field(..., description="Step instruction text")
+    step: int = Field(1, description="1-indexed step sequence number")
+    instruction: str = Field("", description="Step instruction text")
     source_ids: List[str] = Field(default_factory=list, description="Source case IDs supporting step")
+
+    @field_validator("step", mode="before")
+    def validate_step(cls, v, info):
+        if isinstance(v, int):
+            return v
+        if isinstance(v, str):
+            if v.isdigit():
+                return int(v)
+            # If the LLM put the instruction into 'step'
+            return 1
+        return 1
+
+    @field_validator("instruction", mode="before")
+    def validate_instruction(cls, v, info):
+        if isinstance(v, str) and v.strip():
+            return v.strip()
+        # Fallback if instruction was empty but step was a string text
+        raw_step = info.data.get("step") if hasattr(info, "data") else None
+        if isinstance(raw_step, str) and not raw_step.isdigit():
+            return raw_step.strip()
+        return str(v) if v is not None else ""
+
+    @field_validator("source_ids", mode="before")
+    def validate_step_sources(cls, v):
+        if isinstance(v, str):
+            return [v.strip()] if v.strip() else []
+        if isinstance(v, list):
+            return [str(x).strip() for x in v if x]
+        return []
 
 
 class ResolutionClaim(BaseModel):
-    claim_id: str = Field(..., description="Atomic claim identifier (e.g. c1)")
+    claim_id: str = Field("c1", description="Atomic claim identifier (e.g. c1)")
     text: str = Field(..., description="Atomic factual claim text")
     source_ids: List[str] = Field(default_factory=list, description="Cited source case IDs")
     source_validation_status: Optional[str] = Field("valid", description="Status after checking source ID presence")
     verification_status: str = Field("pending", description="Claim verification status")
+
+    @field_validator("source_ids", mode="before")
+    def validate_claim_sources(cls, v):
+        if isinstance(v, str):
+            return [v.strip()] if v.strip() else []
+        if isinstance(v, list):
+            return [str(x).strip() for x in v if x]
+        return []
 
 
 class ResolutionResponse(BaseModel):

@@ -80,7 +80,25 @@ class Settings(BaseSettings):
     resolution_temperature: float = 0.0
     resolution_max_retries: int = 3
     resolution_prompt_version: str = "resolution_prompt_v1"
+    
+    # Multi-Provider LLM & Failover Configuration
+    llm_provider_order: str = "openai,groq,gemini,openrouter"
+    llm_cooldown_seconds: float = 60.0
+    llm_max_provider_retries: int = 2
+
+    # Provider Credentials & Model Names
     openai_api_key: Optional[str] = None
+    openai_model: str = "gpt-4o-mini"
+
+    groq_api_key: Optional[str] = None
+    groq_model: str = "llama-3.3-70b-versatile"
+
+    gemini_api_key: Optional[str] = None
+    gemini_model: str = "gemini-1.5-flash"
+
+    openrouter_api_key: Optional[str] = None
+    openrouter_model: str = "openai/gpt-4o-mini"
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
 
     # Claim Verification / Resolution Faithfulness Configuration
     verifier_llm_model: str = "gpt-4o-mini"
@@ -126,6 +144,17 @@ class Settings(BaseSettings):
     github_sync_include_pull_requests: bool = True
     github_sync_include_comments: bool = True
     github_sync_batch_size: int = 30
+
+    # Storage Retention & Housekeeping Configuration
+    retention_pipeline_days: int = 90
+    retention_stage_days: int = 60
+    retention_webhook_days: int = 30
+    retention_evaluation_days: int = 90
+    storage_warning_percent: float = 70.0
+    storage_cleanup_percent: float = 80.0
+    storage_critical_percent: float = 90.0
+    storage_max_capacity_mb: float = 500.0
+
 
     # Pydantic Configuration to read from .env file
     model_config = SettingsConfigDict(

@@ -1,4 +1,4 @@
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional, Dict, Any
 
 
@@ -13,6 +13,18 @@ class LLMVerifierOutput(BaseModel):
     support_strength: float = Field(0.0, ge=0.0, le=1.0, description="Support strength score 0.0 to 1.0")
     explanation: str = Field("", description="Verification explanation")
     evidence_spans: List[EvidenceSpan] = Field(default_factory=list, description="Extracted evidence spans")
+
+    @field_validator("evidence_spans", mode="before")
+    def validate_evidence_spans(cls, v):
+        if not v or not isinstance(v, list):
+            return []
+        clean = []
+        for item in v:
+            if isinstance(item, dict):
+                clean.append(item)
+            elif isinstance(item, str):
+                clean.append({"source_id": "cited_evidence", "text": item, "relevance_score": 0.5})
+        return clean
 
 
 class ClaimVerificationResult(BaseModel):

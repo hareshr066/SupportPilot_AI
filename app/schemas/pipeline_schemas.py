@@ -25,6 +25,7 @@ class PipelineGraphState(TypedDict, total=False):
     root_cause_result: Optional[Dict[str, Any]]
     retrieval_result: Optional[Dict[str, Any]]
     resolution_result: Optional[Dict[str, Any]]
+    resolution_run_id: Optional[str]
     verification_result: Optional[Dict[str, Any]]
     confidence_result: Optional[Dict[str, Any]]
     routing_result: Optional[Dict[str, Any]]

@@ -17,6 +17,7 @@ from app.database.models import (
     PipelineRun,
     PipelineStageRun,
     ResolutionRun,
+    RootCauseCluster,
 )
 from app.schemas.pipeline_schemas import (
     TicketInput,
@@ -257,15 +258,31 @@ def discover_root_cause_node(state: PipelineGraphState) -> PipelineGraphState:
     dt_start = datetime.now(timezone.utc)
     pipeline_id = state["pipeline_run_id"]
     ticket_inp = state.get("ticket_input", {})
+    repo_id = ticket_inp.get("repository_id", 1)
 
     stage_statuses = dict(state.get("stage_statuses", {}))
     stage_latencies = dict(state.get("stage_latencies", {}))
 
-    rc_res = {
-        "cluster_name": "Terminal Shell Crashes",
-        "cluster_id": 1,
-        "confidence": 0.78
-    }
+    rc_res = None
+    with get_db() as session:
+        # Search for root cause clusters isolated to this repository_id
+        cluster = session.scalar(
+            select(RootCauseCluster)
+            .where(RootCauseCluster.repository_id == repo_id)
+            .order_by(RootCauseCluster.issue_count.desc())
+        )
+        if cluster:
+            rc_res = {
+                "cluster_name": cluster.generated_label,
+                "cluster_id": cluster.cluster_id,
+                "confidence": 0.85
+            }
+        else:
+            rc_res = {
+                "cluster_name": "Unclassified / Insufficient historical cluster evidence",
+                "cluster_id": -1,
+                "confidence": 0.0
+            }
 
     t1 = time.time()
     lat_ms = round((t1 - t0) * 1000, 2)
@@ -389,6 +406,7 @@ def generate_resolution_node(state: PipelineGraphState) -> PipelineGraphState:
     return {
         **state,
         "resolution_result": res_out,
+        "resolution_run_id": res_run_id if 'res_run_id' in locals() else None,
         "stage_statuses": stage_statuses,
         "stage_latencies": stage_latencies,
         "errors": errors
@@ -415,8 +433,10 @@ def verify_claims_node(state: PipelineGraphState) -> PipelineGraphState:
         try:
             ver_service = ClaimVerificationService(db_session=session)
             # Find associated resolution run if available
-            res_run = session.scalar(select(ResolutionRun).order_by(ResolutionRun.id.desc()).limit(1))
-            run_id = res_run.run_id if res_run else f"res_{uuid.uuid4().hex[:8]}"
+            run_id = state.get("resolution_run_id")
+            if not run_id:
+                res_run = session.scalar(select(ResolutionRun).order_by(ResolutionRun.id.desc()).limit(1))
+                run_id = res_run.run_id if res_run else f"res_{uuid.uuid4().hex[:8]}"
 
             summary = ver_service.verify_resolution(resolution_run_id=run_id, session=session)
             ver_res = summary.model_dump() if hasattr(summary, "model_dump") else dict(summary)
@@ -478,7 +498,9 @@ def calculate_confidence_node(state: PipelineGraphState) -> PipelineGraphState:
             features = extract_confidence_features(
                 resolution_run_data=res_out or {},
                 verification_summary=ver_obj,
-                retrieval_metadata=ret_res or {}
+                retrieval_metadata=ret_res or {},
+                duplicate_info=state.get("duplicate_result"),
+                severity_info=state.get("severity_result")
             )
             conf_service = ConfidenceCalibrationService()
             pred = conf_service.compute_confidence_and_decision(

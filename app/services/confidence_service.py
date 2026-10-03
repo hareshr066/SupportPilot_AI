@@ -129,16 +129,27 @@ def extract_confidence_features(
     dup_info = duplicate_info or {}
     sev_info = severity_info or {}
 
-    # A. Retrieval Strength
-    top_dense = float(ret_meta.get("top_dense_similarity", 0.0))
-    top_bm25 = float(ret_meta.get("top_bm25_score", 0.0))
-    top_rrf = float(ret_meta.get("top_rrf_score", 0.0))
-    score_gap = float(ret_meta.get("retrieval_score_gap", 0.0))
-
-    # B. Evidence Quality
-    completeness = float(ret_meta.get("evidence_completeness", 0.0))
-    num_cases = int(ret_meta.get("num_retrieved_cases", 0))
-    num_sources = int(ret_meta.get("num_usable_sources", 0))
+    # A. Retrieval Strength & Evidence Quality
+    cases = ret_meta.get("retrieved_cases", [])
+    if cases and isinstance(cases, list):
+        top_dense = float(cases[0].get("dense_score", ret_meta.get("top_dense_similarity", 0.0)))
+        top_bm25 = float(cases[0].get("bm25_score", ret_meta.get("top_bm25_score", 0.0)))
+        top_rrf = float(cases[0].get("rrf_score", ret_meta.get("top_rrf_score", 0.0)))
+        if len(cases) > 1:
+            score_gap = float(cases[0].get("final_score", 0.0) - cases[1].get("final_score", 0.0))
+        else:
+            score_gap = float(ret_meta.get("retrieval_score_gap", 0.0))
+        num_cases = len(cases)
+        num_sources = sum(len(c.get("source_references", {}).get("pr_urls", [])) + 1 for c in cases)
+        completeness = float(ret_meta.get("evidence_completeness", 1.0 if cases else 0.0))
+    else:
+        top_dense = float(ret_meta.get("top_dense_similarity", 0.0))
+        top_bm25 = float(ret_meta.get("top_bm25_score", 0.0))
+        top_rrf = float(ret_meta.get("top_rrf_score", 0.0))
+        score_gap = float(ret_meta.get("retrieval_score_gap", 0.0))
+        completeness = float(ret_meta.get("evidence_completeness", 0.0))
+        num_cases = int(ret_meta.get("num_retrieved_cases", 0))
+        num_sources = int(ret_meta.get("num_usable_sources", 0))
 
     # C. Claim Verification Signals
     if verification_summary:

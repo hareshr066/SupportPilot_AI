@@ -249,3 +249,53 @@ def test_replay_pipeline_capability(mock_get_db, in_memory_db):
     assert replayed.pipeline_run_id == pipeline_id
     assert replayed.final_decision == "AUTO_RESOLVE_RECOMMENDATION"
     assert replayed.stage_statuses.get("initialize_ticket") == "SUCCEEDED"
+
+
+def test_studysync_root_cause_isolation(in_memory_db):
+    """Regression test 1: Ensure StudySync ticket (repository_id=2) does not inherit VS Code cluster."""
+    from app.services.pipeline_orchestrator import discover_root_cause_node
+    with patch("app.services.pipeline_orchestrator.get_db") as mock_get_db:
+        mock_get_db.return_value.__enter__.return_value = in_memory_db
+        state = {
+            "pipeline_run_id": "test_rc_1",
+            "ticket_input": {"repository_id": 2, "title": "Study progress reset"}
+        }
+        res = discover_root_cause_node(state)
+        rc_summary = res["root_cause_result"]
+        assert rc_summary["cluster_name"] == "Unclassified / Insufficient historical cluster evidence"
+        assert rc_summary["cluster_id"] == -1
+
+
+def test_confidence_features_extraction_from_cases_list():
+    """Regression test 2: Ensure extract_confidence_features extracts retrieval strength metrics from cases list."""
+    from app.services.confidence_service import extract_confidence_features
+    retrieval_meta = {
+        "retrieved_cases": [
+            {
+                "issue_id": 14,
+                "dense_score": 0.846,
+                "bm25_score": 14.1189,
+                "rrf_score": 0.016081,
+                "final_score": 0.020906,
+                "source_references": {"pr_urls": ["https://github.com/StudySync/main/pull/501"]}
+            },
+            {
+                "issue_id": 20,
+                "dense_score": 0.6891,
+                "bm25_score": 5.7928,
+                "rrf_score": 0.015543,
+                "final_score": 0.020205,
+                "source_references": {"pr_urls": ["https://github.com/StudySync/main/pull/507"]}
+            }
+        ],
+        "evidence_completeness": 1.0
+    }
+    features = extract_confidence_features(
+        resolution_run_data={"steps": [1, 2]},
+        verification_summary=None,
+        retrieval_metadata=retrieval_meta
+    )
+    assert features.top_dense_similarity == 0.846
+    assert features.top_bm25_score == 14.1189
+    assert features.num_retrieved_cases == 2
+    assert features.num_usable_sources == 4
