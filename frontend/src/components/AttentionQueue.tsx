@@ -112,16 +112,29 @@ export const AttentionQueue: React.FC<AttentionQueueProps> = ({ items, onReview 
                     {item.repository_name}
                   </td>
                   <td>
-                    <span
-                      style={{
-                        fontFamily: 'var(--font-mono)',
-                        fontWeight: 700,
-                        fontSize: '0.95rem',
-                        color: item.calibrated_confidence >= 0.85 ? 'var(--success)' : 'var(--warning)',
-                      }}
-                    >
-                      {(item.calibrated_confidence * 100).toFixed(1)}%
-                    </span>
+                    {item.calibrated_confidence !== undefined && item.calibrated_confidence !== null ? (
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          fontSize: '0.95rem',
+                          color: item.calibrated_confidence >= 0.85 ? 'var(--success)' : 'var(--warning)',
+                        }}
+                      >
+                        {(item.calibrated_confidence * 100).toFixed(1)}%
+                      </span>
+                    ) : (
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 600,
+                          fontSize: '0.85rem',
+                          color: 'var(--text-dim)',
+                        }}
+                      >
+                        N/A
+                      </span>
+                    )}
                   </td>
                   <td>
                     <StatusBadge decision={item.final_decision} status={item.status} />

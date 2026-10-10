@@ -33,7 +33,7 @@ class RecentRunItem(BaseModel):
     severity: str = "UNKNOWN"
     duplicate_detected: str = "NO"
     root_cause_cluster: str = "Unclustered"
-    calibrated_confidence: float = 0.0
+    calibrated_confidence: Optional[float] = None
     final_decision: str = "HUMAN_ESCALATION"
     status: str = "SUCCEEDED"
     created_at: str = ""
@@ -44,22 +44,21 @@ class RecentRunItem(BaseModel):
     "/summary",
     response_model=DashboardSummaryResponse,
     summary="Get Aggregated Operational Dashboard Metrics",
-    description="Returns total analyzed tickets, today's count, auto-resolution vs escalation breakdowns, high severity count, and average pipeline latency."
+    description="Returns open tickets count, rolling 24h investigation count, auto-resolution vs escalation breakdowns, high severity count, and average pipeline latency."
 )
 def get_dashboard_summary(
     db: Session = Depends(get_db_session),
     current_user: UserIdentity = Depends(get_current_user)
 ) -> DashboardSummaryResponse:
-    # Calculate start of today UTC
-    now_utc = datetime.now(timezone.utc)
-    today_start = datetime(now_utc.year, now_utc.month, now_utc.day, tzinfo=timezone.utc)
+    # 1. Open Tickets (Count of Issue records that are not closed)
+    total_tickets = db.scalar(
+        select(func.count(Issue.id)).where(func.lower(Issue.state) != "closed")
+    ) or 0
 
-    # 1. Total runs
-    total_tickets = db.scalar(select(func.count(PipelineRun.id))) or 0
-
-    # 2. Analyzed today
+    # 2. Rolling 24h Investigations
+    cutoff_24h = datetime.now(timezone.utc) - timedelta(hours=24)
     analyzed_today = db.scalar(
-        select(func.count(PipelineRun.id)).where(PipelineRun.created_at >= today_start)
+        select(func.count(PipelineRun.id)).where(PipelineRun.created_at >= cutoff_24h)
     ) or 0
 
     # 3. Auto resolution recommendations
@@ -82,15 +81,41 @@ def get_dashboard_summary(
         )
     ) or 0
 
-    # 5. High severity tickets (from Issues or PipelineRun)
-    high_sev = db.scalar(
-        select(func.count(PipelineRun.id)).where(
-            PipelineRun.calibrated_confidence > 0.0
-        )
-    ) or 0
+    # 5. High severity tickets (Distinct tickets/runs with HIGH or CRITICAL severity prediction)
+    high_sev_tickets: set = set()
+    high_sev_standalone_runs: set = set()
 
-    # 6. Average latency
-    avg_latency = db.scalar(select(func.avg(PipelineRun.total_latency_ms))) or 0.0
+    from app.database.models import SeverityPrediction, PipelineStageRun
+    sev_preds = db.scalars(
+        select(SeverityPrediction).where(
+            func.upper(SeverityPrediction.predicted_label).in_(["HIGH", "CRITICAL"])
+        )
+    ).all()
+    for sp in sev_preds:
+        if sp.issue_id:
+            high_sev_tickets.add(sp.issue_id)
+
+    stage_runs = db.scalars(
+        select(PipelineStageRun).where(PipelineStageRun.stage_name == "classify_severity")
+    ).all()
+    for sr in stage_runs:
+        summary = sr.result_summary_json or {}
+        label = str(summary.get("predicted_label") or summary.get("predicted_severity") or "").upper()
+        if label in ("HIGH", "CRITICAL"):
+            if sr.pipeline_run and sr.pipeline_run.ticket_id:
+                high_sev_tickets.add(sr.pipeline_run.ticket_id)
+            else:
+                high_sev_standalone_runs.add(sr.pipeline_run_id)
+
+    high_sev = len(high_sev_tickets) + len(high_sev_standalone_runs)
+
+    # 6. Average latency for completed runs
+    avg_latency = db.scalar(
+        select(func.avg(PipelineRun.total_latency_ms)).where(
+            PipelineRun.status.in_(["SUCCEEDED", "ESCALATED", "COMPLETED"]),
+            PipelineRun.total_latency_ms > 0.0
+        )
+    ) or 0.0
 
     return DashboardSummaryResponse(
         total_tickets=total_tickets,
@@ -129,8 +154,8 @@ def get_recent_runs(
         # Reconstruct structured details via replay
         replayed = replay_pipeline_run(r.pipeline_run_id)
         
-        issue_title = "Support Ticket Analysis"
-        repo_name = "System Repository"
+        issue_title = "Standalone Pipeline Analysis" if r.ticket_id is None else "Support Ticket Analysis"
+        repo_name = "System Workspace" if r.ticket_id is None else "Unknown"
         issue_num = None
         sev_label = "NORMAL"
         dup_str = "NO"
@@ -154,6 +179,8 @@ def get_recent_runs(
             if replayed.root_cause:
                 rc_cluster = replayed.root_cause.get("cluster_name") or replayed.root_cause.get("predicted_cluster_id") or rc_cluster
 
+        conf_val = round(float(r.calibrated_confidence), 3) if r.calibrated_confidence is not None else None
+
         results.append(RecentRunItem(
             pipeline_run_id=r.pipeline_run_id,
             ticket_id=r.ticket_id,
@@ -163,7 +190,7 @@ def get_recent_runs(
             severity=str(sev_label).upper(),
             duplicate_detected=dup_str,
             root_cause_cluster=str(rc_cluster),
-            calibrated_confidence=round(float(r.calibrated_confidence or 0.0), 3),
+            calibrated_confidence=conf_val,
             final_decision=r.final_decision or "HUMAN_ESCALATION",
             status=r.status,
             created_at=r.created_at.isoformat() if r.created_at else "",

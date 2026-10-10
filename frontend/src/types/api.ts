@@ -118,7 +118,7 @@ export interface RecentRunItem {
   severity: string;
   duplicate_detected: string;
   root_cause_cluster: string;
-  calibrated_confidence: number;
+  calibrated_confidence?: number | null;
   final_decision: string;
   status: string;
   created_at: string;

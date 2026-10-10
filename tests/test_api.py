@@ -280,3 +280,105 @@ def test_request_id_and_security_headers():
     assert "X-Request-ID" in res.headers
     assert res.headers.get("X-Content-Type-Options") == "nosniff"
     assert res.headers.get("X-Frame-Options") == "DENY"
+
+
+def test_dashboard_metrics_and_recent_runs_regression():
+    """Regression test for dashboard metrics semantics and recent runs."""
+    from datetime import timedelta
+    from app.database.models import Issue, PipelineRun, PipelineStageRun, SeverityPrediction
+
+    now = datetime.now(timezone.utc)
+    mock_session = MagicMock()
+
+    # 3 issues (2 open, 1 closed)
+    issue_open1 = Issue(id=1, issue_number=1, repository_id=1, title="Open 1", body="b", state="open", created_at=now, html_url="http://x")
+    issue_open2 = Issue(id=2, issue_number=2, repository_id=1, title="Open 2", body="b", state="open", created_at=now, html_url="http://x")
+    issue_closed = Issue(id=3, issue_number=3, repository_id=1, title="Closed 3", body="b", state="closed", created_at=now, html_url="http://x")
+
+    # Runs
+    run_recent = PipelineRun(
+        id=10, pipeline_run_id="run_recent_1", ticket_id=1, status="SUCCEEDED",
+        final_decision="AUTO_RESOLVE_RECOMMENDATION", calibrated_confidence=0.92,
+        total_latency_ms=100.0, created_at=now
+    )
+    run_old = PipelineRun(
+        id=11, pipeline_run_id="run_old_2", ticket_id=2, status="ESCALATED",
+        final_decision="HUMAN_ESCALATION", calibrated_confidence=None,
+        total_latency_ms=200.0, created_at=now - timedelta(hours=48)
+    )
+    run_unlinked = PipelineRun(
+        id=12, pipeline_run_id="run_unlinked_3", ticket_id=None, status="SUCCEEDED",
+        final_decision="AUTO_RESOLVE_RECOMMENDATION", calibrated_confidence=0.88,
+        total_latency_ms=150.0, created_at=now
+    )
+
+    stage_high = PipelineStageRun(
+        pipeline_run_id="run_recent_1", stage_name="classify_severity", status="SUCCEEDED",
+        result_summary_json={"predicted_severity": "high"}
+    )
+
+    # Set up mock scalar / scalars behavior
+    call_count = [0]
+    def mock_scalar(stmt):
+        call_count[0] += 1
+        cnt = call_count[0]
+        if cnt == 1:
+            return 2  # open tickets
+        elif cnt == 2:
+            return 2  # 24h analyzed
+        elif cnt == 3:
+            return 2  # auto resolve
+        elif cnt == 4:
+            return 1  # human escalation
+        elif cnt == 5:
+            return 150.0  # avg latency
+        return 0
+
+    def mock_scalars(stmt):
+        stmt_str = str(stmt).lower()
+        mock_res = MagicMock()
+        if "from severity_predictions" in stmt_str:
+            mock_res.all.return_value = []
+        elif "from pipeline_stage_runs" in stmt_str:
+            mock_res.all.return_value = [stage_high]
+        elif "from pipeline_runs" in stmt_str:
+            mock_res.all.return_value = [run_recent, run_old, run_unlinked]
+        else:
+            mock_res.all.return_value = []
+        return mock_res
+
+    mock_session.scalar.side_effect = mock_scalar
+    mock_session.scalars.side_effect = mock_scalars
+
+    def override_get_db():
+        yield mock_session
+
+    app.dependency_overrides[get_db_session] = override_get_db
+    try:
+        # Test /summary
+        res_sum = client.get("/api/v1/dashboard/summary")
+        assert res_sum.status_code == 200
+        data_sum = res_sum.json()
+        assert data_sum["total_tickets"] == 2
+        assert data_sum["analyzed_today"] == 2
+        assert data_sum["auto_resolution_recommendations"] == 2
+        assert data_sum["human_escalations"] == 1
+        assert data_sum["high_severity_tickets"] == 1
+        assert data_sum["average_pipeline_latency_ms"] == 150.0
+
+        # Test /recent-runs
+        res_runs = client.get("/api/v1/dashboard/recent-runs")
+        assert res_runs.status_code == 200
+        data_runs = res_runs.json()
+        assert len(data_runs) == 3
+
+        # Verify confidence: 0.92 for first run, None (null) for second run
+        assert data_runs[0]["calibrated_confidence"] == 0.92
+        assert data_runs[1]["calibrated_confidence"] is None
+
+        # Verify unlinked run title and repo name
+        assert data_runs[2]["title"] == "Standalone Pipeline Analysis"
+        assert data_runs[2]["repository_name"] == "System Workspace"
+    finally:
+        app.dependency_overrides.clear()
+

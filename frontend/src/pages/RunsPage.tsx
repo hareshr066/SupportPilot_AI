@@ -145,16 +145,29 @@ export const RunsPage: React.FC = () => {
                       <SeverityBadge severity={r.severity} />
                     </td>
                     <td>
-                      <span
-                        style={{
-                          fontFamily: 'var(--font-mono)',
-                          fontWeight: 700,
-                          fontSize: '0.875rem',
-                          color: r.calibrated_confidence >= 0.85 ? 'var(--success)' : 'var(--warning)',
-                        }}
-                      >
-                        {(r.calibrated_confidence * 100).toFixed(1)}%
-                      </span>
+                      {r.calibrated_confidence !== undefined && r.calibrated_confidence !== null ? (
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 700,
+                            fontSize: '0.875rem',
+                            color: r.calibrated_confidence >= 0.85 ? 'var(--success)' : 'var(--warning)',
+                          }}
+                        >
+                          {(r.calibrated_confidence * 100).toFixed(1)}%
+                        </span>
+                      ) : (
+                        <span
+                          style={{
+                            fontFamily: 'var(--font-mono)',
+                            fontWeight: 600,
+                            fontSize: '0.825rem',
+                            color: 'var(--text-dim)',
+                          }}
+                        >
+                          N/A
+                        </span>
+                      )}
                     </td>
                     <td>
                       <StatusBadge decision={r.final_decision} status={r.status} />

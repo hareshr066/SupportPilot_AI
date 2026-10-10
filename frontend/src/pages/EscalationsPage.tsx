@@ -148,7 +148,9 @@ export const EscalationsPage: React.FC = () => {
                     </td>
                     <td>
                       <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.875rem', color: '#FBBF24' }}>
-                        {(r.calibrated_confidence * 100).toFixed(1)}%
+                        {r.calibrated_confidence !== undefined && r.calibrated_confidence !== null
+                          ? `${(r.calibrated_confidence * 100).toFixed(1)}%`
+                          : 'N/A'}
                       </span>
                     </td>
                     <td>

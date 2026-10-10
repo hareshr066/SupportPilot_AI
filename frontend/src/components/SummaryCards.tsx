@@ -33,7 +33,7 @@ export const SummaryCards: React.FC<Props> = ({ summary, loading }) => {
           <Ticket size={14} color="var(--primary)" />
         </div>
         <div className="kpi-value">{summary?.total_tickets ?? '0'}</div>
-        <div className="kpi-subtext">Ingested issue repository</div>
+        <div className="kpi-subtext">Active open support tickets</div>
       </div>
 
       {/* 2. Investigations */}
@@ -43,7 +43,7 @@ export const SummaryCards: React.FC<Props> = ({ summary, loading }) => {
           <Clock size={14} color="var(--cyan)" />
         </div>
         <div className="kpi-value">{summary?.analyzed_today ?? '0'}</div>
-        <div className="kpi-subtext">Automated triage runs</div>
+        <div className="kpi-subtext">Automated triage (last 24h)</div>
       </div>
 
       {/* 3. Auto-Resolved */}
