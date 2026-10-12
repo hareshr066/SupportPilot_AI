@@ -12,7 +12,8 @@ import {
   ShieldAlert,
   Activity,
   CheckCircle2,
-  AlertCircle
+  AlertCircle,
+  Plug,
 } from 'lucide-react';
 
 export const Sidebar: React.FC = () => {
@@ -75,6 +76,25 @@ export const Sidebar: React.FC = () => {
           >
             <FolderGit2 size={17} />
             <span>Repositories</span>
+          </NavLink>
+
+          <NavLink
+            to="/integration"
+            className={({ isActive }) => `sidebar-link ${isActive ? 'active' : ''}`}
+            style={{ position: 'relative' }}
+          >
+            <Plug size={17} />
+            <span>Integration</span>
+            <span style={{
+              fontSize: '0.6rem',
+              fontWeight: 700,
+              background: 'var(--primary)',
+              color: '#fff',
+              borderRadius: '3px',
+              padding: '1px 5px',
+              marginLeft: 'auto',
+              letterSpacing: '0.03em',
+            }}>SDK</span>
           </NavLink>
 
           <NavLink

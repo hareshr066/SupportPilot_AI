@@ -143,24 +143,63 @@ def trigger_automatic_ticket_analysis(
 
 
 def _get_or_create_app_repository(db: Session, app_name: str) -> Repository:
-    """Finds or creates a target repository record for an application (e.g. StudySync)."""
-    clean_app = (app_name or "StudySync").strip()
+    """
+    Resolves the repository to associate with an incoming ticket.
+
+    Resolution order:
+    1. Exact full_name match: "AppName/something" where owner == app_name (case-insensitive).
+    2. Partial owner match: any Repository whose owner matches app_name.
+    3. Fallback: create a stub repo "AppName/main" so tickets are never lost.
+    """
+    clean_app = (app_name or "SupportPilot").strip()
+    lower_app = clean_app.lower()
+
+    # 1. Exact owner match — prefer repos actually registered via the Repositories page
+    real_repo = db.scalar(
+        select(Repository)
+        .where(func.lower(Repository.owner) == lower_app)
+        .where(Repository.enabled == True)
+        .order_by(Repository.id)
+    )
+    if real_repo:
+        logger.info(f"Routing ticket for app '{clean_app}' to registered repository '{real_repo.full_name}' (id={real_repo.id})")
+        return real_repo
+
+    # 2. Full name prefix match (e.g. "acme/backend" for app_name="acme")
+    prefix_repo = db.scalar(
+        select(Repository)
+        .where(func.lower(Repository.full_name).startswith(lower_app + "/"))
+        .where(Repository.enabled == True)
+        .order_by(Repository.id)
+    )
+    if prefix_repo:
+        logger.info(f"Routing ticket for app '{clean_app}' to registered repository '{prefix_repo.full_name}' via prefix match (id={prefix_repo.id})")
+        return prefix_repo
+
+    # 3. Fallback: create a stub so no ticket is ever rejected
     full_name = f"{clean_app}/main"
-    repo = db.scalar(select(Repository).where(Repository.full_name == full_name))
-    if not repo:
-        repo = Repository(
-            owner=clean_app,
-            name="main",
-            full_name=full_name,
-            html_url=f"https://github.com/{clean_app}/main",
-            enabled=True,
-            auto_analysis_enabled=True,
-            created_at=datetime.now(timezone.utc)
-        )
-        db.add(repo)
-        db.commit()
-        db.refresh(repo)
-    return repo
+    existing_stub = db.scalar(select(Repository).where(Repository.full_name == full_name))
+    if existing_stub:
+        return existing_stub
+
+    logger.warning(
+        f"No registered repository found for app '{clean_app}'. "
+        f"Creating stub repo '{full_name}'. Register a real repo on the Integration page to improve triage quality."
+    )
+    stub_repo = Repository(
+        owner=clean_app,
+        name="main",
+        full_name=full_name,
+        html_url=f"https://github.com/{clean_app}/main",
+        enabled=True,
+        auto_analysis_enabled=True,
+        created_at=datetime.now(timezone.utc)
+    )
+    db.add(stub_repo)
+    db.commit()
+    db.refresh(stub_repo)
+    return stub_repo
+
 
 
 def _parse_ticket_id(ticket_id_str: str) -> int:

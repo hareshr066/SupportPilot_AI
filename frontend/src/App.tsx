@@ -12,6 +12,7 @@ import { EvaluationPage } from './pages/EvaluationPage';
 import { TicketsPage } from './pages/TicketsPage';
 import { RunsPage } from './pages/RunsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { IntegrationPage } from './pages/IntegrationPage';
 
 export const App: React.FC = () => {
   return (
@@ -31,6 +32,7 @@ export const App: React.FC = () => {
                 <Route path="/runs/:id" element={<PipelineRunDetailsPage />} />
                 <Route path="/runs" element={<RunsPage />} />
                 <Route path="/repositories" element={<RepositoriesPage />} />
+                <Route path="/integration" element={<IntegrationPage />} />
                 <Route path="/escalations" element={<EscalationsPage />} />
                 <Route path="/evaluation" element={<EvaluationPage />} />
                 <Route path="/settings" element={<SettingsPage />} />
