@@ -291,3 +291,24 @@ def test_evaluation_metrics_helpers():
     assert rec_5 == 0.5  # 1 hit out of 2 ground truth items
     assert mrr_10 == 1.0 / 3.0  # Hit at rank 3
     assert ndcg_10 > 0.0
+
+
+def test_studysync_retrieval_isolation_no_leakage(in_memory_db, mock_embedding_service, tmp_path):
+    """Verify StudySync retrieval cannot leak microsoft/vscode issues and retrieves only closed historical cases."""
+    service = HybridRetrievalService(
+        embedding_service=mock_embedding_service, db_session=in_memory_db, bm25_index_dir=str(tmp_path)
+    )
+    service.load_or_build_bm25_index(in_memory_db, force_rebuild=True)
+
+    results = service.retrieve_resolved_cases(
+        query_text="ERR_CONNECTION_RESET",
+        repository_id=2,
+        top_k=10,
+        db_session=in_memory_db
+    )
+    assert len(results) > 0
+    for r in results:
+        assert r["repository_id"] == 2
+        assert r["state"].lower() == "closed"
+        assert "microsoft/vscode" not in r["url"]
+        assert r["repository"] != "microsoft/vscode"

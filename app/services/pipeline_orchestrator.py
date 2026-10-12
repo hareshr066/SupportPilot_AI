@@ -8,12 +8,13 @@ from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Tuple
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from config import settings
 from app.database.session import get_db
 from app.database.models import (
     Issue,
+    Repository,
     PipelineRun,
     PipelineStageRun,
     ResolutionRun,
@@ -130,6 +131,14 @@ def initialize_ticket_node(state: PipelineGraphState) -> PipelineGraphState:
             if issue_rec:
                 ticket_inp["title"] = issue_rec.title
                 ticket_inp["body"] = issue_rec.body or ""
+                if not ticket_inp.get("repository_id"):
+                    ticket_inp["repository_id"] = issue_rec.repository_id
+                if not ticket_inp.get("issue_number"):
+                    ticket_inp["issue_number"] = issue_rec.issue_number
+
+        if not ticket_inp.get("repository_id"):
+            studysync_repo = session.scalar(select(Repository).where(func.lower(Repository.owner) == "studysync"))
+            ticket_inp["repository_id"] = studysync_repo.id if studysync_repo else 1
 
         # Create PipelineRun DB record
         run_rec = session.scalar(select(PipelineRun).where(PipelineRun.pipeline_run_id == pipeline_id))
@@ -226,7 +235,7 @@ def detect_duplicate_node(state: PipelineGraphState) -> PipelineGraphState:
         res = service.detect_duplicate(
             title=ticket_inp.get("title", ""),
             body=ticket_inp.get("body", ""),
-            repository_id=ticket_inp.get("repository_id", 1)
+            repository_id=ticket_inp.get("repository_id")
         )
         dup_res = res.model_dump() if hasattr(res, "model_dump") else dict(res)
     except Exception as exc:
@@ -258,7 +267,7 @@ def discover_root_cause_node(state: PipelineGraphState) -> PipelineGraphState:
     dt_start = datetime.now(timezone.utc)
     pipeline_id = state["pipeline_run_id"]
     ticket_inp = state.get("ticket_input", {})
-    repo_id = ticket_inp.get("repository_id", 1)
+    repo_id = ticket_inp.get("repository_id")
 
     stage_statuses = dict(state.get("stage_statuses", {}))
     stage_latencies = dict(state.get("stage_latencies", {}))
@@ -321,7 +330,7 @@ def retrieve_cases_node(state: PipelineGraphState) -> PipelineGraphState:
         query_text = f"{ticket_inp.get('title', '')} {ticket_inp.get('body', '')}".strip()
         raw_cases = service.retrieve_resolved_cases(
             query_text=query_text,
-            repository_id=ticket_inp.get("repository_id", 1),
+            repository_id=ticket_inp.get("repository_id"),
             top_k=5
         )
         ret_res = {"retrieved_cases": raw_cases, "evidence_completeness": 1.0 if raw_cases else 0.0}
@@ -377,7 +386,7 @@ def generate_resolution_node(state: PipelineGraphState) -> PipelineGraphState:
         req_obj = ResolutionRequest(
             title=ticket_inp.get("title", ""),
             body=ticket_inp.get("body", ""),
-            repository_id=ticket_inp.get("repository_id", 1),
+            repository_id=ticket_inp.get("repository_id"),
             issue_number=state.get("ticket_id"),
             severity_prediction=state.get("severity_result", {}).get("predicted_severity"),
             root_cause_cluster=state.get("root_cause_result", {}).get("cluster_name")

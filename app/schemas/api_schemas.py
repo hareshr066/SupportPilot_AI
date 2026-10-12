@@ -43,6 +43,8 @@ class ExternalTicketCreate(BaseModel):
     application: Optional[str] = Field("StudySync", description="Target application name")
     environment: Optional[str] = Field("production", description="Environment")
     feature: Optional[str] = Field(None, description="Feature component tag")
+    external_ticket_id: Optional[str] = Field(None, description="External ticket ID for idempotency")
+    metadata: Optional[Dict[str, Any]] = Field(None, description="Arbitrary metadata from external system")
 
     @field_validator("title")
     @classmethod

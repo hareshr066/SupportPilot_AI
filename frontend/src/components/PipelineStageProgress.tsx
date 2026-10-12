@@ -132,7 +132,10 @@ export const PipelineStageProgress: React.FC<Props> = ({ stages = [], result, is
   return (
     <div className="stage-timeline">
       {EIGHT_STAGES.map((def) => {
-        const stageRun = stageMap.get(def.key);
+        let stageRun = stageMap.get(def.key);
+        if (!stageRun && def.key === 'route_ticket') {
+          stageRun = stageMap.get('create_escalation_package') || stageMap.get('finalize_pipeline');
+        }
         let status: 'SUCCEEDED' | 'RUNNING' | 'FAILED' | 'SKIPPED' | 'PENDING' = 'PENDING';
         if (stageRun) {
           status = stageRun.status;
@@ -140,7 +143,13 @@ export const PipelineStageProgress: React.FC<Props> = ({ stages = [], result, is
           status = 'SUCCEEDED';
         }
 
-        const latency = stageRun?.latency_ms || result?.stage_latencies?.[def.key];
+        const latency =
+          stageRun?.latency_ms ||
+          result?.stage_latencies?.[def.key] ||
+          (def.key === 'route_ticket'
+            ? result?.stage_latencies?.['create_escalation_package'] ||
+              result?.stage_latencies?.['finalize_pipeline']
+            : undefined);
         const summaryText = def.getResultSummary ? def.getResultSummary(result, stageRun) : '';
         const isExpanded = !!expandedKeys[def.key];
 

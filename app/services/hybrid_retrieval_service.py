@@ -7,7 +7,7 @@ from datetime import datetime, timezone
 from typing import Dict, List, Any, Optional, Tuple, Set
 
 from sqlalchemy.orm import Session
-from sqlalchemy import select
+from sqlalchemy import select, func
 
 from config import settings
 from app.database.session import get_db
@@ -240,6 +240,15 @@ class HybridRetrievalService:
         if repository_id is not None and settings.retrieval_repository_scope == "same_repository":
             q = q.where(Issue.repository_id == repository_id)
 
+        has_closed = session.scalar(
+            select(func.count(Issue.id)).where(
+                Issue.repository_id == repository_id if (repository_id and settings.retrieval_repository_scope == "same_repository") else True,
+                func.lower(Issue.state) == "closed"
+            )
+        )
+        if has_closed and has_closed > 0:
+            q = q.where(func.lower(Issue.state) == "closed")
+
         # Temporal filtering constraint: candidate.closed_at < temporal_cutoff
         if temporal_cutoff is not None:
             q = q.where(Issue.created_at < temporal_cutoff)
@@ -286,6 +295,16 @@ class HybridRetrievalService:
         q = select(Issue.id)
         if repository_id is not None and settings.retrieval_repository_scope == "same_repository":
             q = q.where(Issue.repository_id == repository_id)
+
+        has_closed = session.scalar(
+            select(func.count(Issue.id)).where(
+                Issue.repository_id == repository_id if (repository_id and settings.retrieval_repository_scope == "same_repository") else True,
+                func.lower(Issue.state) == "closed"
+            )
+        )
+        if has_closed and has_closed > 0:
+            q = q.where(func.lower(Issue.state) == "closed")
+
         if temporal_cutoff is not None:
             q = q.where(Issue.created_at < temporal_cutoff)
 
@@ -344,8 +363,10 @@ class HybridRetrievalService:
             if not candidate_ids:
                 return []
 
-            # Retrieve candidate Issue objects from DB
+            # Retrieve candidate Issue objects from DB, strictly isolated to same repository
             issues_q = select(Issue).where(Issue.id.in_(candidate_ids))
+            if repository_id is not None and settings.retrieval_repository_scope == "same_repository":
+                issues_q = issues_q.where(Issue.repository_id == repository_id)
             candidate_issues = {iss.id: iss for iss in session.scalars(issues_q).all()}
 
             scored_candidates = []

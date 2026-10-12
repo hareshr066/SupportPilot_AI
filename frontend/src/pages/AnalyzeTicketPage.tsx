@@ -317,7 +317,10 @@ export const AnalyzeTicketPage: React.FC = () => {
           <PipelineStageProgress
             stages={stages}
             result={pipelineResult}
-            isCompleted={!!pipelineResult && pipelineResult.status === 'SUCCEEDED'}
+            isCompleted={
+              !!pipelineResult &&
+              (pipelineResult.status === 'SUCCEEDED' || pipelineResult.status === 'ESCALATED')
+            }
           />
 
           {pipelineResult && (

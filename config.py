@@ -15,6 +15,8 @@ class Settings(BaseSettings):
 
     # GitHub Personal Access Token. Can be None for unauthenticated access (low rate limits).
     github_token: Optional[str] = None
+    github_repo_owner: str = "StudySync"
+    github_repo_name: str = "main"
     
     # Directory where raw ingested data is saved
     raw_data_dir: str = "./data/raw"
