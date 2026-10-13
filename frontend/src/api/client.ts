@@ -8,12 +8,15 @@ import type {
   TicketAnalyzePayload,
   PipelineResult,
   PipelineStageRun,
-  APIErrorResponse,
   EvaluationListResponse,
   EvaluationRunSummary,
   EvaluationFailuresResponse,
   IssueItem,
   IssueDetail,
+  AuthResponse,
+  LoginPayload,
+  SignupPayload,
+  AuthOrganization,
 } from '../types/api';
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://127.0.0.1:8000';
@@ -32,25 +35,72 @@ export class APIClientError extends Error {
   }
 }
 
+function getAuthHeaders(headers: Record<string, string> = {}): Record<string, string> {
+  const token = localStorage.getItem('sp_token');
+  const result: Record<string, string> = { ...headers };
+  if (token) {
+    result['Authorization'] = `Bearer ${token}`;
+  }
+  return result;
+}
+
 async function handleResponse<T>(response: Response): Promise<T> {
   if (!response.ok) {
-    let errorData: APIErrorResponse | null = null;
+    let errorData: any = null;
     try {
       errorData = await response.json();
     } catch {
       // Ignore JSON parse errors for non-JSON error responses
     }
 
-    const code = errorData?.error?.code || 'HTTP_ERROR';
-    const message = errorData?.error?.message || `HTTP ${response.status}: ${response.statusText}`;
+    const code = errorData?.error?.code || errorData?.code || 'HTTP_ERROR';
+    const message =
+      errorData?.detail ||
+      errorData?.error?.message ||
+      errorData?.message ||
+      `HTTP ${response.status}: ${response.statusText}`;
 
-    throw new APIClientError(code, message, response.status);
+    throw new APIClientError(code, message, response.status, errorData);
   }
 
   return response.json();
 }
 
 export const api = {
+  // Auth Endpoints
+  async login(payload: LoginPayload): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/v1/auth/login`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse<AuthResponse>(res);
+  },
+
+  async signup(payload: SignupPayload): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/v1/auth/signup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    });
+    return handleResponse<AuthResponse>(res);
+  },
+
+  async getMe(): Promise<AuthResponse> {
+    const res = await fetch(`${API_BASE_URL}/api/v1/auth/me`, {
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<AuthResponse>(res);
+  },
+
+  async rotateApiKey(): Promise<AuthOrganization> {
+    const res = await fetch(`${API_BASE_URL}/api/v1/auth/rotate-api-key`, {
+      method: 'POST',
+      headers: getAuthHeaders(),
+    });
+    return handleResponse<AuthOrganization>(res);
+  },
+
   // Health & System
   async getReadiness(): Promise<{ status: string; checks?: Record<string, string> }> {
     const res = await fetch(`${API_BASE_URL}/ready`);

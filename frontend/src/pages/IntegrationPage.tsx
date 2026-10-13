@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useCallback } from 'react';
 import { api } from '../api/client';
 import type { Repository } from '../types/api';
+import { useAuth } from '../context/AuthContext';
 import { ConnectRepoWizard } from '../components/ConnectRepoWizard';
 import {
   Plug,
@@ -108,15 +109,16 @@ export const IntegrationPage: React.FC = () => {
 
   useEffect(() => { fetchRepos(); }, []);
 
-  const apiBase = 'https://your-supportpilot-api.com';
-  const repoId = selectedRepo?.id ?? 1;
+  const { organization } = useAuth();
+  const apiBase = import.meta.env.VITE_API_BASE_URL || 'https://your-supportpilot-api.com';
+  const apiKey = organization?.api_key || 'sp_live_YOUR_API_KEY';
   const appName = selectedRepo ? (selectedRepo.full_name?.split('/')[0] || selectedRepo.owner) : 'YourApp';
 
   // ── code snippets ─────────────────────────────────────────────────────────
 
   const curlSnippet = `curl -X POST ${apiBase}/api/v1/tickets \\
   -H "Content-Type: application/json" \\
-  -H "X-API-Key: YOUR_API_KEY" \\
+  -H "X-API-Key: ${apiKey}" \\
   -d '{
     "title": "User cannot log in after password reset",
     "description": "After clicking reset link, user is redirected to /login but gets a 403 error. Steps: 1) Request reset, 2) Click link, 3) Enter new password — error appears.",
@@ -128,7 +130,7 @@ export const IntegrationPage: React.FC = () => {
   const pythonSnippet = `import requests
 
 SUPPORTPILOT_API = "${apiBase}"
-API_KEY = "YOUR_API_KEY"  # from your .env or secrets manager
+API_KEY = "${apiKey}"  # your organization API key
 
 def submit_support_ticket(title: str, description: str, severity: str = "medium"):
     resp = requests.post(
@@ -195,7 +197,7 @@ except Exception as exc:
 
   const envSnippet = `# Add to your .env (never commit this file)
 SUPPORTPILOT_API_URL=${apiBase}
-SUPPORTPILOT_API_KEY=YOUR_API_KEY
+SUPPORTPILOT_API_KEY=${apiKey}
 SUPPORTPILOT_APP_NAME=${appName}`;
 
   // ── accordion toggle ──────────────────────────────────────────────────────

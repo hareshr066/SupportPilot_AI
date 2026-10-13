@@ -78,6 +78,43 @@ issue_pull_requests = Table(
 # ORM Entity Models
 # ---------------------------------------------------------
 
+# ---------------------------------------------------------
+# Multi-Tenant Auth Models
+# ---------------------------------------------------------
+
+class Organization(Base):
+    """A company/team that uses SupportPilot. Owns repositories and users."""
+    __tablename__ = "organizations"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    name: Mapped[str] = mapped_column(String(255), nullable=False, unique=True, index=True)
+    api_key: Mapped[str] = mapped_column(String(512), nullable=False, unique=True, index=True)
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    members: Mapped[List["DashboardUser"]] = relationship(
+        "DashboardUser", back_populates="organization", cascade="all, delete-orphan"
+    )
+
+
+class DashboardUser(Base):
+    """A human user of the SupportPilot dashboard (admin/operator, not a GitHub user)."""
+    __tablename__ = "dashboard_users"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    email: Mapped[str] = mapped_column(String(320), nullable=False, unique=True, index=True)
+    password_hash: Mapped[str] = mapped_column(String(255), nullable=False)
+    full_name: Mapped[str] = mapped_column(String(255), nullable=False)
+    org_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("organizations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    created_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+    last_login_at: Mapped[Optional[datetime]] = mapped_column(DateTime(timezone=True), nullable=True)
+
+    # Relationships
+    organization: Mapped["Organization"] = relationship("Organization", back_populates="members")
+
+
 class Repository(Base):
     __tablename__ = "repositories"
 

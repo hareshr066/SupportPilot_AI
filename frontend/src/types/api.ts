@@ -290,3 +290,38 @@ export interface EvaluationFailuresResponse {
   failures: EvaluationFailureItem[];
 }
 
+export interface AuthUser {
+  id: number;
+  email: string;
+  full_name: string;
+  org_id: number;
+  created_at?: string;
+  last_login_at?: string;
+}
+
+export interface AuthOrganization {
+  id: number;
+  name: string;
+  api_key: string;
+  created_at?: string;
+}
+
+export interface AuthResponse {
+  access_token: string;
+  token_type: string;
+  user: AuthUser;
+  organization: AuthOrganization;
+}
+
+export interface LoginPayload {
+  email: string;
+  password: string;
+}
+
+export interface SignupPayload {
+  email: string;
+  password: string;
+  full_name: string;
+  organization_name?: string;
+}
+

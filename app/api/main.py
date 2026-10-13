@@ -15,6 +15,7 @@ from app.core.errors import (
     unhandled_exception_handler,
 )
 from app.api.routes.health import router as health_router
+from app.api.routes.auth import router as auth_router
 from app.api.routes.tickets import router as tickets_router
 from app.api.routes.runs import router as runs_router
 from app.api.routes.repositories import router as repositories_router
@@ -22,6 +23,7 @@ from app.api.routes.webhooks import router as webhooks_router
 from app.api.routes.dashboard import router as dashboard_router
 from app.api.routes.evaluations import router as evaluations_router
 from app.api.routes.issues import router as issues_router
+from app.database.init_db import init_db
 
 # Configure Logger
 logging.basicConfig(
@@ -69,6 +71,8 @@ def create_app() -> FastAPI:
 
     # 4. Include Routers (Supporting both /v1 for external service contracts & /api/v1 for React frontend)
     app.include_router(health_router)
+    app.include_router(auth_router, prefix="/v1/auth")
+    app.include_router(auth_router, prefix="/api/v1/auth")
     app.include_router(tickets_router, prefix="/v1/tickets")
     app.include_router(tickets_router, prefix="/api/v1/tickets")
     app.include_router(runs_router, prefix="/v1/runs")
@@ -78,6 +82,12 @@ def create_app() -> FastAPI:
     app.include_router(dashboard_router)
     app.include_router(evaluations_router)
     app.include_router(issues_router)
+
+    # Initialize DB tables (creates organizations, dashboard_users, etc. if missing)
+    try:
+        init_db()
+    except Exception as exc:
+        logger.warning(f"Database init during startup: {exc}")
 
     logger.info("FastAPI Application initialized successfully.")
     return app

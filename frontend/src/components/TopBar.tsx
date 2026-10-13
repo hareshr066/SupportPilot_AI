@@ -1,12 +1,14 @@
 import React, { useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useWorkspace } from '../context/WorkspaceContext';
-import { Search, Activity, GitBranch, Plus } from 'lucide-react';
+import { useAuth } from '../context/AuthContext';
+import { Search, Activity, GitBranch, Plus, LogOut, Building2 } from 'lucide-react';
 
 export const TopBar: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const { repositories, activeRepoId, setActiveRepoId, systemReady, demoMode } = useWorkspace();
+  const { user, organization, logout } = useAuth();
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   const getPageInfo = (): { title: string; subtitle?: string } => {
@@ -119,6 +121,70 @@ export const TopBar: React.FC = () => {
             <Plus size={14} />
             <span>Investigate</span>
           </button>
+        )}
+
+        {/* User Profile & Logout */}
+        {user && (
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: '0.65rem',
+              paddingLeft: '0.75rem',
+              borderLeft: '1px solid var(--border)',
+            }}
+          >
+            <div
+              style={{
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-end',
+                lineHeight: 1.25,
+              }}
+            >
+              <span
+                style={{
+                  fontWeight: 700,
+                  fontSize: '0.8rem',
+                  color: 'var(--text-main)',
+                }}
+              >
+                {user.full_name}
+              </span>
+              <span
+                style={{
+                  fontSize: '0.7rem',
+                  color: 'var(--text-muted)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '3px',
+                }}
+              >
+                <Building2 size={10} color="var(--primary)" />
+                {organization?.name || 'Workspace'}
+              </span>
+            </div>
+
+            <button
+              onClick={() => {
+                logout();
+                navigate('/login');
+              }}
+              title="Sign Out"
+              className="btn btn-secondary"
+              style={{
+                padding: '0.4rem 0.6rem',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '0.35rem',
+                fontSize: '0.75rem',
+                color: 'var(--text-muted)',
+              }}
+            >
+              <LogOut size={13} />
+              <span>Sign Out</span>
+            </button>
+          </div>
         )}
       </div>
     </header>
