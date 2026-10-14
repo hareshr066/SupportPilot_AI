@@ -123,6 +123,7 @@ export interface RecentRunItem {
   status: string;
   created_at: string;
   total_latency_ms: number;
+  escalation_reason?: string | null;
 }
 
 export interface PipelineStageRun {

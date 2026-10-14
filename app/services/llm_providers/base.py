@@ -124,7 +124,7 @@ def sanitize_json_dict(parsed: Dict[str, Any], schema_cls: Type[BaseModel]) -> D
                 })
         parsed["claims"] = sanitized_claims
 
-    # 3. Sanitize resolution_type if present
+    # 3. Sanitize resolution_type if present or infer for ResolutionResponse
     if "resolution_type" in parsed:
         res_type = str(parsed["resolution_type"]).lower()
         if "confirmed" in res_type or "historical" in res_type:
@@ -133,14 +133,42 @@ def sanitize_json_dict(parsed: Dict[str, Any], schema_cls: Type[BaseModel]) -> D
             parsed["resolution_type"] = "insufficient_evidence"
         else:
             parsed["resolution_type"] = "evidence_based_recommendation"
+    else:
+        # Schema-aware default for ResolutionResponse
+        claims_list = parsed.get("claims", [])
+        has_citations = any(c.get("source_ids") for c in claims_list if isinstance(c, dict))
+        parsed["resolution_type"] = "confirmed_historical_resolution" if has_citations else "evidence_based_recommendation"
 
     # 4. Sanitize top-level required fields if missing
     if not parsed.get("summary"):
         parsed["summary"] = parsed.get("overview") or parsed.get("resolution_summary") or parsed.get("recommended_resolution") or parsed.get("diagnosis") or "Grounded resolution generated from historical evidence."
     if not parsed.get("diagnosis"):
-        parsed["diagnosis"] = parsed.get("root_cause") or parsed.get("problem_analysis") or parsed.get("summary") or "Diagnosis derived from historical closed issue evidence."
+        first_claim = parsed.get("claims", [{}])[0].get("text") if parsed.get("claims") and isinstance(parsed["claims"][0], dict) else None
+        parsed["diagnosis"] = parsed.get("root_cause") or parsed.get("problem_analysis") or first_claim or parsed.get("summary") or "Diagnosis derived from historical closed issue evidence."
     if not parsed.get("recommended_resolution"):
-        parsed["recommended_resolution"] = parsed.get("fix") or parsed.get("solution") or parsed.get("recommendation") or parsed.get("summary") or "Apply recommended fix based on cited historical resolution."
+        steps_text = "; ".join([s.get("instruction", "") for s in parsed.get("steps", []) if isinstance(s, dict)])
+        parsed["recommended_resolution"] = parsed.get("fix") or parsed.get("solution") or parsed.get("recommendation") or (steps_text if steps_text else None) or parsed.get("summary") or "Apply recommended fix based on cited historical resolution."
+
+    # 5. Sanitize LLMVerifierOutput if applicable
+    if schema_cls.__name__ == "LLMVerifierOutput":
+        verdict = str(parsed.get("verdict", "")).upper().strip()
+        valid_verdicts = {"SUPPORTED", "PARTIALLY_SUPPORTED", "UNSUPPORTED", "CONTRADICTED", "UNCLEAR"}
+        if verdict not in valid_verdicts:
+            str_val = float(parsed.get("support_strength", 0.5))
+            if str_val >= 0.75:
+                parsed["verdict"] = "SUPPORTED"
+            elif str_val >= 0.35:
+                parsed["verdict"] = "PARTIALLY_SUPPORTED"
+            else:
+                parsed["verdict"] = "UNSUPPORTED"
+        else:
+            parsed["verdict"] = verdict
+        try:
+            parsed["support_strength"] = float(parsed.get("support_strength", 0.7))
+        except (ValueError, TypeError):
+            parsed["support_strength"] = 0.7
+        if not parsed.get("explanation"):
+            parsed["explanation"] = f"Verdict {parsed['verdict']} based on evaluated evidence passages."
 
     return parsed
 

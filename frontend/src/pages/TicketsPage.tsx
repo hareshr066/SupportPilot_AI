@@ -30,8 +30,8 @@ export const TicketsPage: React.FC = () => {
   const [decisionFilter, setDecisionFilter] = useState<string>('ALL');
   const [searchInput, setSearchInput] = useState<string>(searchParams.get('search') || '');
 
-  const fetchIssues = async () => {
-    setLoading(true);
+  const fetchIssues = async (showSpinner: boolean = true) => {
+    if (showSpinner) setLoading(true);
     setError(null);
 
     if (demoMode) {
@@ -62,7 +62,7 @@ export const TicketsPage: React.FC = () => {
         }
         setIssues(filtered);
         setTotalCount(filtered.length);
-        setLoading(false);
+        if (showSpinner) setLoading(false);
       }, 200);
       return;
     }
@@ -92,17 +92,21 @@ export const TicketsPage: React.FC = () => {
     } catch (err: any) {
       setError(err.message || 'Failed to load issues from backend.');
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchIssues();
+    fetchIssues(true);
+    const interval = setInterval(() => {
+      fetchIssues(false);
+    }, 4000);
+    return () => clearInterval(interval);
   }, [demoMode, activeRepoId, stateFilter, severityFilter, decisionFilter]);
 
   const handleSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    fetchIssues();
+    fetchIssues(true);
   };
 
   return (
@@ -123,7 +127,7 @@ export const TicketsPage: React.FC = () => {
         </div>
 
         <div style={{ display: 'flex', gap: '0.6rem' }}>
-          <button className="btn btn-secondary" onClick={fetchIssues} disabled={loading}>
+          <button className="btn btn-secondary" onClick={() => fetchIssues(true)} disabled={loading}>
             <RefreshCw size={14} className={loading ? 'spinner' : ''} />
             <span>Refresh</span>
           </button>

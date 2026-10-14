@@ -38,6 +38,7 @@ class RecentRunItem(BaseModel):
     status: str = "SUCCEEDED"
     created_at: str = ""
     total_latency_ms: float = 0.0
+    escalation_reason: Optional[str] = None
 
 
 @router.get(
@@ -179,7 +180,24 @@ def get_recent_runs(
             if replayed.root_cause:
                 rc_cluster = replayed.root_cause.get("cluster_name") or replayed.root_cause.get("predicted_cluster_id") or rc_cluster
 
-        conf_val = round(float(r.calibrated_confidence), 3) if r.calibrated_confidence is not None else None
+        esc_reason = None
+        if replayed and replayed.escalation_package:
+            codes = replayed.escalation_package.get("reason_codes", [])
+            if "CONFIDENCE_BELOW_THRESHOLD" in codes:
+                esc_reason = "Confidence Below Threshold"
+            elif "CRITICAL_CLAIM_FAILURE" in codes or "VERIFICATION_FAILED" in codes:
+                esc_reason = "Verification Gap"
+            elif "NO_RESOLUTION_EVIDENCE" in codes or "INSUFFICIENT_EVIDENCE" in codes:
+                esc_reason = "Insufficient Evidence"
+            elif codes:
+                esc_reason = " ".join(codes[0].replace("_", " ").title().split())
+        elif r.status == "ESCALATED":
+            esc_reason = "Low Confidence"
+
+        raw_conf = r.calibrated_confidence
+        if raw_conf is None and replayed and replayed.calibrated_confidence is not None:
+            raw_conf = replayed.calibrated_confidence
+        conf_val = round(float(raw_conf), 3) if raw_conf is not None else None
 
         results.append(RecentRunItem(
             pipeline_run_id=r.pipeline_run_id,
@@ -194,7 +212,8 @@ def get_recent_runs(
             final_decision=r.final_decision or "HUMAN_ESCALATION",
             status=r.status,
             created_at=r.created_at.isoformat() if r.created_at else "",
-            total_latency_ms=round(float(r.total_latency_ms or 0.0), 2)
+            total_latency_ms=round(float(r.total_latency_ms or 0.0), 2),
+            escalation_reason=esc_reason
         ))
 
     return results

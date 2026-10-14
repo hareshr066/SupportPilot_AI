@@ -84,7 +84,7 @@ class Settings(BaseSettings):
     resolution_prompt_version: str = "resolution_prompt_v1"
     
     # Multi-Provider LLM & Failover Configuration
-    llm_provider_order: str = "openai,groq,gemini,openrouter"
+    llm_provider_order: str = "openrouter,gemini,groq,openai"
     llm_cooldown_seconds: float = 60.0
     llm_max_provider_retries: int = 2
 

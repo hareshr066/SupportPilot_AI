@@ -696,7 +696,9 @@ def create_escalation_package_node(state: PipelineGraphState) -> PipelineGraphSt
     stage_statuses = dict(state.get("stage_statuses", {}))
     stage_latencies = dict(state.get("stage_latencies", {}))
 
-    reason_codes = dec_res.get("reason_codes", []) if dec_res else []
+    reason_codes = list(dec_res.get("reason_codes", [])) if dec_res else []
+    if conf_res and "reason_codes" in conf_res:
+        reason_codes.extend(conf_res["reason_codes"])
     if not reason_codes:
         if state.get("insufficient_evidence"):
             reason_codes.append("NO_RESOLUTION_EVIDENCE")
@@ -707,7 +709,7 @@ def create_escalation_package_node(state: PipelineGraphState) -> PipelineGraphSt
         elif "calculate_confidence" in stage_statuses and stage_statuses["calculate_confidence"] == "FAILED":
             reason_codes.append("CALIBRATION_MODEL_UNAVAILABLE")
         else:
-            reason_codes.append("HUMAN_ESCALATION_TRIGGERED")
+            reason_codes.append("CONFIDENCE_BELOW_THRESHOLD")
 
     ver_verdict = ver_res.get("overall_faithfulness_status", "UNCLEAR") if ver_res else "UNCLEAR"
     unsup_cnt = ver_res.get("unsupported_count", 1) if ver_res else 1
@@ -782,6 +784,16 @@ def finalize_pipeline_node(state: PipelineGraphState) -> PipelineGraphState:
             run_rec.recommended_team = rec_team
             run_rec.total_latency_ms = total_lat_ms
             run_rec.completed_at = dt_start
+
+            conf_res = state.get("confidence_result") or {}
+            rout_res = state.get("routing_result") or {}
+            cal_conf = conf_res.get("calibrated_confidence")
+            rout_prob = rout_res.get("routing_probability")
+            if cal_conf is not None:
+                run_rec.calibrated_confidence = float(cal_conf)
+            if rout_prob is not None:
+                run_rec.routing_probability = float(rout_prob)
+
             session.commit()
 
         t1 = time.time()
@@ -978,6 +990,18 @@ def replay_pipeline_run(pipeline_run_id: str) -> Optional[PipelineResult]:
 
         stage_statuses = {s.stage_name: s.status for s in stages}
         stage_latencies = {s.stage_name: s.latency_ms for s in stages}
+        stage_map = {s.stage_name: s.result_summary_json for s in stages if s.result_summary_json}
+
+        conf_data = stage_map.get("calculate_confidence") or {}
+        rout_data = stage_map.get("route_ticket") or {}
+
+        calibrated_conf = run_rec.calibrated_confidence
+        if (calibrated_conf is None or calibrated_conf == 0.0) and "calibrated_confidence" in conf_data:
+            calibrated_conf = conf_data["calibrated_confidence"]
+
+        routing_prob = run_rec.routing_probability
+        if (routing_prob is None or routing_prob == 0.0) and "routing_probability" in rout_data:
+            routing_prob = rout_data["routing_probability"]
 
         return PipelineResult(
             pipeline_run_id=run_rec.pipeline_run_id,
@@ -985,11 +1009,21 @@ def replay_pipeline_run(pipeline_run_id: str) -> Optional[PipelineResult]:
             status=run_rec.status,
             final_decision=run_rec.final_decision or "HUMAN_ESCALATION",
             recommended_team=run_rec.recommended_team or settings.routing_default_queue,
-            calibrated_confidence=run_rec.calibrated_confidence or 0.0,
-            routing_probability=run_rec.routing_probability or 0.0,
+            calibrated_confidence=float(calibrated_conf or 0.0),
+            routing_probability=float(routing_prob or 0.0),
             human_review_required=(run_rec.status == "ESCALATED"),
             total_latency_ms=run_rec.total_latency_ms,
             stage_latencies=stage_latencies,
             stage_statuses=stage_statuses,
+            severity=stage_map.get("classify_severity"),
+            duplicate=stage_map.get("detect_duplicate"),
+            root_cause=stage_map.get("discover_root_cause"),
+            retrieval=stage_map.get("retrieve_cases"),
+            resolution=stage_map.get("generate_resolution"),
+            verification=stage_map.get("verify_claims"),
+            confidence=conf_data if conf_data else None,
+            routing=rout_data if rout_data else None,
+            decision=stage_map.get("make_decision"),
+            escalation_package=stage_map.get("create_escalation_package"),
             audit_reference=f"artifacts/pipeline/run_{pipeline_run_id}/pipeline_summary.json"
         )

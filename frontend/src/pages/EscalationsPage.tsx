@@ -14,8 +14,8 @@ export const EscalationsPage: React.FC = () => {
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
 
-  const fetchEscalations = async () => {
-    setLoading(true);
+  const fetchEscalations = async (showSpinner: boolean = true) => {
+    if (showSpinner) setLoading(true);
     setError(null);
 
     if (demoMode) {
@@ -24,7 +24,7 @@ export const EscalationsPage: React.FC = () => {
           (r) => r.final_decision === 'HUMAN_ESCALATION' || r.status === 'ESCALATED'
         );
         setEscalatedRuns(demoEscalations);
-        setLoading(false);
+        if (showSpinner) setLoading(false);
       }, 200);
       return;
     }
@@ -39,12 +39,17 @@ export const EscalationsPage: React.FC = () => {
         setError('Failed to fetch escalation queue.');
       }
     } finally {
-      setLoading(false);
+      if (showSpinner) setLoading(false);
     }
   };
 
   useEffect(() => {
-    fetchEscalations();
+    fetchEscalations(true);
+    // Real-time polling every 4 seconds for immediate ticket updates
+    const interval = setInterval(() => {
+      fetchEscalations(false);
+    }, 4000);
+    return () => clearInterval(interval);
   }, [demoMode]);
 
   return (
@@ -65,7 +70,7 @@ export const EscalationsPage: React.FC = () => {
           </p>
         </div>
 
-        <button className="btn btn-secondary" onClick={fetchEscalations} disabled={loading}>
+        <button className="btn btn-secondary" onClick={() => fetchEscalations(true)} disabled={loading}>
           <RefreshCw size={14} className={loading ? 'spinner' : ''} />
           <span>Refresh Queue</span>
         </button>
@@ -147,14 +152,39 @@ export const EscalationsPage: React.FC = () => {
                       {r.root_cause_cluster}
                     </td>
                     <td>
-                      <span style={{ fontFamily: 'var(--font-mono)', fontWeight: 700, fontSize: '0.875rem', color: '#FBBF24' }}>
+                      <span
+                        style={{
+                          fontFamily: 'var(--font-mono)',
+                          fontWeight: 700,
+                          fontSize: '0.875rem',
+                          color:
+                            (r.calibrated_confidence ?? 0) >= 0.85
+                              ? 'var(--success)'
+                              : (r.calibrated_confidence ?? 0) > 0.4
+                              ? '#FBBF24'
+                              : 'var(--text-muted)',
+                        }}
+                      >
                         {r.calibrated_confidence !== undefined && r.calibrated_confidence !== null
                           ? `${(r.calibrated_confidence * 100).toFixed(1)}%`
-                          : 'N/A'}
+                          : '0.0%'}
                       </span>
                     </td>
                     <td>
-                      <span className="badge badge-warning">Verification Gap</span>
+                      <span
+                        className={`badge ${
+                          r.escalation_reason?.toLowerCase().includes('gap') ||
+                          r.escalation_reason?.toLowerCase().includes('failure') ||
+                          r.escalation_reason?.toLowerCase().includes('contradiction')
+                            ? 'badge-warning'
+                            : 'badge-neutral'
+                        }`}
+                      >
+                        {r.escalation_reason ||
+                          ((r.calibrated_confidence ?? 0) < 0.85
+                            ? 'Confidence Below Threshold'
+                            : 'Review Required')}
+                      </span>
                     </td>
                     <td style={{ textAlign: 'right' }}>
                       <button
